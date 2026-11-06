@@ -1,0 +1,14 @@
+# secrets
+.env
+.env.*
+!.env.example
+# local audio and worker scratch
+stems/*/
+work/
+# tooling
+node_modules/
+.next/
+.DS_Store
+__pycache__/
+supabase/.temp/
+supabase/.branches/

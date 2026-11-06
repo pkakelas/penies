@@ -1,0 +1,14 @@
+import type { Metadata } from "next";
+import { RootShell } from "@/components/RootShell";
+import { dictionaries, SITE_NAME } from "@/lib/i18n";
+
+const t = dictionaries.en;
+
+export const metadata: Metadata = {
+  title: { default: t.meta.title, template: `%s — ${SITE_NAME.en}` },
+  description: t.meta.description,
+};
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <RootShell lang="en">{children}</RootShell>;
+}

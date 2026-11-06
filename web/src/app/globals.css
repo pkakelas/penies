@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-commissioner), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-noto-display), ui-serif, Georgia, serif;
+
+  /* Warm black, cream and brass: a stage at night, strings under a lamp. */
+  --color-ink: #0d0b09;
+  --color-coal: #15120e;
+  --color-ember: #1d1913;
+  --color-line: rgb(243 236 224 / 0.11);
+  --color-cream: #f3ece0;
+  --color-sand: #a89e8d;
+  --color-brass: #d9a441;
+  --color-brass-bright: #f4cf82;
+  --color-wine: #c2543f;
+}
+
+html {
+  background: var(--color-ink);
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: var(--color-brass);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brass-bright);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Sliders (seek and speed): a thin line with a brass fill up to --fill. */
+.range {
+  --fill: 0%;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+.range:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--color-brass) var(--fill),
+    rgb(243 236 224 / 0.16) var(--fill)
+  );
+}
+.range::-moz-range-track {
+  height: 3px;
+  border-radius: 3px;
+  background: rgb(243 236 224 / 0.16);
+}
+.range::-moz-range-progress {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--color-brass);
+}
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: var(--color-cream);
+  box-shadow: 0 0 0 4px rgb(217 164 65 / 0);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-cream);
+}
+.range:hover:not(:disabled)::-webkit-slider-thumb,
+.range:active:not(:disabled)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 5px rgb(217 164 65 / 0.25);
+  transform: scale(1.1);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .rise {
+    animation: none;
+  }
+}

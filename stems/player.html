@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stem player</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 16px/1.5 system-ui, sans-serif;
+    max-width: 34rem;
+    margin: 3rem auto;
+    padding: 0 1rem;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+  .row { display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0; flex-wrap: wrap; }
+  button, .pick {
+    font: inherit;
+    padding: 0.5rem 1.1rem;
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    border-radius: 0.5rem;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.small { padding: 0.2rem 0.7rem; font-size: 0.9rem; }
+  .pick input { display: none; }
+  #seek, #speed { flex: 1; min-width: 10rem; }
+  #time, #speedValue { font-variant-numeric: tabular-nums; }
+  #speedValue { min-width: 3.2rem; text-align: right; }
+  #status { opacity: 0.75; margin: 0.5rem 0; }
+  #status.error { color: #c0392b; opacity: 1; }
+  .toggle { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; user-select: none; }
+  .toggle input { width: 1.1rem; height: 1.1rem; }
+</style>
+</head>
+<body>
+  <h1 id="title">Stem player</h1>
+
+  <label class="pick">
+    Choose song folder
+    <input type="file" id="folder" webkitdirectory>
+  </label>
+  <p id="status">Choose a song folder made by guitar_split.py.</p>
+
+  <div class="row">
+    <button id="play" disabled>Play</button>
+    <button id="pause" disabled>Pause</button>
+    <label class="toggle"><input type="checkbox" id="mpouzouki"> Enable mpouzouki</label>
+    <label class="toggle"><input type="checkbox" id="vocals" checked> Enable vocals</label>
+  </div>
+
+  <div class="row">
+    <input type="range" id="seek" min="0" max="0" step="0.1" value="0" disabled>
+    <span id="time">0:00 / 0:00</span>
+  </div>
+
+  <div class="row">
+    <label for="speed">Speed</label>
+    <input type="range" id="speed" min="50" max="150" step="5" value="100">
+    <span id="speedValue">100%</span>
+    <button id="speedReset" class="small">Reset</button>
+  </div>
+
+<script src="SignalsmithStretch.js"></script>
+<script>
+// How it works: the stems are decoded and mixed into six channels:
+//   channels 0-1: instruments + rhythm-guitar (always heard)
+//   channels 2-3: vocals (heard when "Enable vocals" is on)
+//   channels 4-5: lead-guitar (heard when "Enable mpouzouki" is on)
+// All six are handed to ONE Signalsmith Stretch node (SignalsmithStretch.js,
+// next to this file), which plays them at any speed without changing the
+// pitch. One node for everything keeps the stems exactly in sync. It replaces
+// the browser's own speed change, which sounds rough on music when slowed.
+//
+// A folder without separate vocals/instruments files still works: its
+// no-guitar file (which contains the vocals) becomes the backing and the
+// vocals toggle is switched off.
+const STEMS = ['no-guitar', 'rhythm-guitar', 'lead-guitar', 'vocals', 'instruments'];
+const CHANNELS = 6;
+const $ = (id) => document.getElementById(id);
+
+let ctx = null;        // AudioContext, created on first folder choice
+let stretch = null;    // Signalsmith Stretch node holding the six channels
+let startDelay = 0;    // seconds the stretcher needs to start a note cleanly
+let backingBus = null; // stereo backing, straight to the speakers
+let vocalGain = null;  // volume of the vocals channels (0 or 1)
+let leadGain = null;   // volume of the lead-guitar channels (0 or 1)
+let loaded = false;
+let duration = 0;      // seconds
+let playing = false;
+let rate = 1;          // 1 = normal speed
+// Where we are: at AudioContext time `anchorTime` the song was at `anchorPos`
+// seconds, and (while playing) it moves on from there at `rate`.
+let anchorPos = 0;
+let anchorTime = 0;
+
+const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const leadLevel = () => ($('mpouzouki').checked ? 1 : 0);
+const vocalLevel = () => ($('vocals').checked ? 1 : 0);
+
+function position() {
+  if (!playing) return anchorPos;
+  return Math.min(duration, anchorPos + Math.max(0, ctx.currentTime - anchorTime) * rate);
+}
+
+function setStatus(text, isError = false) {
+  $('status').textContent = text;
+  $('status').classList.toggle('error', isError);
+}
+
+function render() {
+  $('seek').value = position();
+  $('time').textContent = `${fmt(position())} / ${fmt(duration)}`;
+  $('play').disabled = !loaded || playing;
+  $('pause').disabled = !playing;
+}
+
+// Play from `pos` seconds into the song at the current speed, starting
+// `delay` seconds from now.
+function startAt(pos, delay = 0) {
+  anchorPos = pos;
+  anchorTime = ctx.currentTime + delay;
+  stretch.schedule({ active: true, input: pos, output: anchorTime, rate });
+}
+
+function stopAt(pos) {
+  anchorPos = pos;
+  playing = false;
+  stretch.schedule({ active: false, output: ctx.currentTime });
+}
+
+function applySpeed() {
+  const percent = Number($('speed').value);
+  const pos = position(); // read before the speed changes
+  rate = percent / 100;
+  $('speedValue').textContent = `${percent}%`;
+  if (playing) startAt(pos);
+}
+
+async function setupAudioGraph() {
+  if (typeof SignalsmithStretch !== 'function') {
+    throw new Error('SignalsmithStretch.js is missing. It has to sit next to player.html.');
+  }
+  ctx ||= new AudioContext();
+  const node = await SignalsmithStretch(ctx, {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    outputChannelCount: [CHANNELS],
+  });
+  startDelay = await node.latency();
+
+  const split = ctx.createChannelSplitter(CHANNELS);
+  const vocals = ctx.createChannelMerger(2);
+  const lead = ctx.createChannelMerger(2);
+  backingBus = ctx.createChannelMerger(2);
+  vocalGain = ctx.createGain();
+  leadGain = ctx.createGain();
+  vocalGain.gain.value = vocalLevel();
+  leadGain.gain.value = leadLevel();
+
+  node.connect(split);
+  split.connect(backingBus, 0, 0);
+  split.connect(backingBus, 1, 1);
+  split.connect(vocals, 2, 0);
+  split.connect(vocals, 3, 1);
+  split.connect(lead, 4, 0);
+  split.connect(lead, 5, 1);
+  backingBus.connect(ctx.destination);
+  vocals.connect(vocalGain).connect(ctx.destination);
+  lead.connect(leadGain).connect(ctx.destination);
+  stretch = node;
+}
+
+// Mix decoded stems into six equally long channels. `groups` holds three
+// lists of AudioBuffers (backing, vocals, lead); each list is summed into one
+// stereo pair, and an empty list leaves its pair silent.
+function mixChannels(groups) {
+  const frames = Math.min(...groups.flat().map((buffer) => buffer.length));
+  const side = (buffer, i) => buffer.getChannelData(Math.min(i, buffer.numberOfChannels - 1));
+  return groups.flatMap((buffers) => [0, 1].map((s) => { // 0 = left, 1 = right
+    const out = new Float32Array(frames);
+    buffers.forEach((buffer, n) => {
+      const data = side(buffer, s);
+      if (n === 0) out.set(data.subarray(0, frames));
+      else for (let i = 0; i < frames; i++) out[i] += data[i];
+    });
+    return out;
+  }));
+}
+
+async function loadFiles(files) {
+  if (playing) stopAt(0);
+  anchorPos = 0;
+  loaded = false;
+  $('seek').disabled = true;
+  render();
+
+  // Match files directly inside the chosen folder by name, whatever the extension.
+  const found = {};
+  let folderName = '';
+  for (const file of files) {
+    const parts = (file.webkitRelativePath || file.name).split('/');
+    if (parts.length > 2) continue; // ignore sub-folders
+    folderName ||= parts.length === 2 ? parts[0] : '';
+    const stem = file.name.replace(/\.[^.]+$/, '').toLowerCase();
+    if (STEMS.includes(stem) && !found[stem]) found[stem] = file;
+  }
+  // With separate vocals + instruments files the vocals get their own toggle;
+  // otherwise no-guitar (vocals included) is the backing.
+  const hasVocals = Boolean(found['vocals'] && found['instruments']);
+  const needed = ['rhythm-guitar', 'lead-guitar', ...(hasVocals ? ['vocals', 'instruments'] : ['no-guitar'])];
+  const missing = needed.filter((stem) => !found[stem]);
+  if (missing.length) {
+    setStatus(`This folder is missing: ${missing.join(', ')}.`, true);
+    return;
+  }
+
+  setStatus('Loading…');
+  try {
+    if (!stretch) await setupAudioGraph();
+    const decoded = Object.fromEntries(await Promise.all(
+      needed.map(async (stem) => [stem, await ctx.decodeAudioData(await found[stem].arrayBuffer())])
+    ));
+    const channels = mixChannels(hasVocals
+      ? [[decoded['instruments'], decoded['rhythm-guitar']], [decoded['vocals']], [decoded['lead-guitar']]]
+      : [[decoded['no-guitar'], decoded['rhythm-guitar']], [], [decoded['lead-guitar']]]);
+    duration = channels[0].length / ctx.sampleRate;
+    await stretch.dropBuffers(); // forget the previous song
+    // Hand the channels over to the stretcher (moved, not copied).
+    await stretch.addBuffers(channels, channels.map((channel) => channel.buffer));
+  } catch (error) {
+    setStatus(`Could not load the audio: ${error.message}`, true);
+    return;
+  }
+
+  loaded = true;
+  $('seek').max = duration;
+  $('seek').disabled = false;
+  $('title').textContent = folderName || 'Stem player';
+  $('vocals').disabled = !hasVocals;
+  if (!hasVocals) $('vocals').checked = true; // they are part of the backing here
+  setStatus(hasVocals
+    ? 'Ready.'
+    : 'Ready. This folder has no separate vocals file, so the vocals cannot be switched off.');
+  render();
+}
+
+function play() {
+  if (!loaded || playing) return;
+  ctx.resume();
+  vocalGain.gain.value = vocalLevel();
+  leadGain.gain.value = leadLevel();
+  playing = true;
+  startAt(anchorPos, startDelay);
+  render();
+}
+
+function pause() {
+  if (!playing) return;
+  stopAt(position());
+  render();
+}
+
+$('folder').addEventListener('change', (event) => loadFiles([...event.target.files]));
+$('play').addEventListener('click', play);
+$('pause').addEventListener('click', pause);
+
+// Short fades instead of hard switches, to avoid a click.
+$('mpouzouki').addEventListener('change', () => {
+  if (leadGain) leadGain.gain.setTargetAtTime(leadLevel(), ctx.currentTime, 0.015);
+});
+$('vocals').addEventListener('change', () => {
+  if (vocalGain) vocalGain.gain.setTargetAtTime(vocalLevel(), ctx.currentTime, 0.015);
+});
+
+$('seek').addEventListener('input', () => {
+  if (!loaded) return;
+  const pos = Number($('seek').value);
+  if (playing) startAt(pos);
+  else anchorPos = pos;
+  render();
+});
+
+$('speed').addEventListener('input', applySpeed);
+$('speedReset').addEventListener('click', () => {
+  $('speed').value = 100;
+  applySpeed();
+});
+
+(function tick() {
+  if (playing) {
+    if (position() >= duration) stopAt(0); // end of song: back to the start
+    render();
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+import { dictionaries, href, SITE_NAME, type Lang } from "@/lib/i18n";
+
+/** A bouzouki pick. */
+export function PickMark({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path
+        d="M12 22.2c-1.5 0-2.6-1-3.6-2.6C6.2 16.2 3 10.9 3 7.3 3 3.9 7 1.8 12 1.8s9 2.1 9 5.5c0 3.6-3.2 8.9-5.4 12.3-1 1.6-2.1 2.6-3.6 2.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Top bar. `page` is the current page's path without the language prefix
+ * ("/", "/songs/atakti", "/admin"); the language switch links to the same
+ * page in the other language.
+ */
+export function Header({ lang, page }: { lang: Lang; page: string }) {
+  const t = dictionaries[lang];
+  const other: Lang = lang === "el" ? "en" : "el";
+  return (
+    <header className="absolute inset-x-0 top-0 z-20">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 sm:px-10">
+        <a href={href(lang, "/")} className="group flex items-center gap-2.5">
+          <PickMark className="h-5 w-5 text-brass transition-transform duration-300 group-hover:-rotate-12" />
+          <span className="font-display text-2xl tracking-tight">{SITE_NAME[lang]}</span>
+        </a>
+        <nav className="flex items-center gap-6 text-sm text-sand sm:gap-8">
+          <a href={`${href(lang, "/")}#songs`} className="transition-colors hover:text-cream">
+            {t.nav.songs}
+          </a>
+          <a
+            href={href(other, page)}
+            hrefLang={other}
+            className="rounded-full border border-line px-3 py-1 text-xs font-medium tracking-widest text-cream uppercase transition-colors hover:border-brass hover:text-brass-bright"
+          >
+            {other === "en" ? "EN" : "ΕΛ"}
+          </a>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+export function Footer({ lang }: { lang: Lang }) {
+  return (
+    <footer className="mt-auto border-t border-line">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-10 sm:px-10">
+        <PickMark className="h-4 w-4 text-brass" />
+        <span className="font-display text-lg">{SITE_NAME[lang]}</span>
+      </div>
+    </footer>
+  );
+}
