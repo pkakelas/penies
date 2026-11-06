@@ -64,7 +64,7 @@ npm --prefix web run dev      # the site at http://localhost:3000
 - Checks for the site: `npm --prefix web run build` and `npm --prefix web run lint`.
 - The pipeline alone, without Supabase: `uv run guitar_split.py "https://www.youtube.com/watch?v=VIDEO_ID"` saves five stems into `stems/<video title>/`. Re-running is safe: finished steps are skipped and a submitted job is resumed from `.mvsep-jobs.json` in the song folder.
 - Python dependencies (`yt-dlp`, `requests`) are declared inline in the scripts and installed by `uv`. There is no `ffmpeg` on this machine and none is needed.
-- The site is not deployed anywhere yet.
+- The site is on Vercel: project `penia` (team `dimitris-lamprinos-projects`, framework preset Next.js, root directory `web`), https://penia-one.vercel.app, connected to the GitHub repository `pkakelas/penia`. A push to `main` deploys to production; other branches get preview deployments. Env vars on Vercel: the two `NEXT_PUBLIC_SUPABASE_*` only.
 
 ## MVSEP API notes
 
