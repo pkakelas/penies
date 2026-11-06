@@ -1,7 +1,8 @@
 // Plays a song's stems in sync, at any speed, without changing the pitch.
 //
 // The stems are decoded and mixed into six channels:
-//   0-1  backing: instruments + rhythm guitar (always heard)
+//   0-1  backing: instruments (always heard). Songs split before the MVSEP
+//        preset have the rhythm guitar as a stem of its own, which is added here.
 //   2-3  vocals
 //   4-5  lead guitar (the bouzouki)
 // All six go into ONE Signalsmith Stretch node (public/vendor/SignalsmithStretch.js),
@@ -42,10 +43,10 @@ function loadLibrary(): Promise<void> {
   return libraryLoading;
 }
 
-/** Encoded audio files by stem name. `vocals` is optional. */
+/** Encoded audio files by stem name. `rhythm-guitar` and `vocals` are optional. */
 export type StemFiles = {
   instruments: ArrayBuffer;
-  "rhythm-guitar": ArrayBuffer;
+  "rhythm-guitar"?: ArrayBuffer;
   "lead-guitar": ArrayBuffer;
   vocals?: ArrayBuffer;
 };
@@ -105,11 +106,15 @@ export class StemEngine {
       const decode = (file: ArrayBuffer) => ctx.decodeAudioData(file);
       const [instruments, rhythm, leadGuitar, voice] = await Promise.all([
         decode(files.instruments),
-        decode(files["rhythm-guitar"]),
+        files["rhythm-guitar"] ? decode(files["rhythm-guitar"]) : null,
         decode(files["lead-guitar"]),
         files.vocals ? decode(files.vocals) : null,
       ]);
-      const channels = mixChannels([[instruments, rhythm], voice ? [voice] : [], [leadGuitar]]);
+      const channels = mixChannels([
+        rhythm ? [instruments, rhythm] : [instruments],
+        voice ? [voice] : [],
+        [leadGuitar],
+      ]);
       engine.duration = channels[0].length / ctx.sampleRate;
       // Hand the channels over to the stretcher (moved, not copied).
       await node.addBuffers(channels, channels.map((channel) => channel.buffer as ArrayBuffer));
