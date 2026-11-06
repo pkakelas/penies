@@ -34,6 +34,11 @@ const el = {
     open: "Άνοιγμα",
     unknownArtist: "Άγνωστος καλλιτέχνης",
   },
+  song: {
+    firstPerformed: "Πρώτη εκτέλεση",
+    firstSinger: "Πρώτη ερμηνεία",
+    singer: "Σε αυτή την εκτέλεση",
+  },
   player: {
     back: "Όλα τα τραγούδια",
     play: "Αναπαραγωγή",
@@ -89,7 +94,6 @@ const el = {
     failed: "Απέτυχε",
     retry: "Νέα προσπάθεια",
     songTitle: "Τίτλος",
-    artist: "Καλλιτέχνης",
     save: "Αποθήκευση",
     saved: "Αποθηκεύτηκε",
     test: "Δοκιμή",
@@ -121,6 +125,11 @@ const en: Dict = {
     empty: "The first songs are on their way.",
     open: "Open",
     unknownArtist: "Unknown artist",
+  },
+  song: {
+    firstPerformed: "First performed",
+    firstSinger: "First sung by",
+    singer: "In this recording",
   },
   player: {
     back: "All songs",
@@ -177,7 +186,6 @@ const en: Dict = {
     failed: "Failed",
     retry: "Try again",
     songTitle: "Title",
-    artist: "Artist",
     save: "Save",
     saved: "Saved",
     test: "Test",

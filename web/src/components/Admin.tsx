@@ -331,7 +331,7 @@ function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void
   );
 }
 
-/** A finished song: fix its title and artist, listen to it, publish it or take it down. */
+/** A finished song: fix its details, listen to it, publish it or take it down. */
 function SongCard(props: {
   lang: Lang;
   song: Song;
@@ -340,11 +340,24 @@ function SongCard(props: {
 }) {
   const { lang, song, onUpdate, onRemove } = props;
   const t = dictionaries[lang].admin;
+  const labels = dictionaries[lang].song;
   const [title, setTitle] = useState(song.title);
   const [artist, setArtist] = useState(song.artist);
+  const [firstPerformed, setFirstPerformed] = useState(song.first_performed);
+  const [firstSinger, setFirstSinger] = useState(song.first_singer);
   const [busy, setBusy] = useState(false);
   const isDraft = song.status === "draft";
-  const edited = title.trim() !== song.title || artist.trim() !== song.artist;
+  const details = {
+    title: title.trim(),
+    artist: artist.trim(),
+    first_performed: firstPerformed.trim(),
+    first_singer: firstSinger.trim(),
+  };
+  const edited =
+    details.title !== song.title ||
+    details.artist !== song.artist ||
+    details.first_performed !== song.first_performed ||
+    details.first_singer !== song.first_singer;
 
   const run = async (fields: Partial<Song>) => {
     setBusy(true);
@@ -360,8 +373,24 @@ function SongCard(props: {
           <input value={title} onChange={(event) => setTitle(event.target.value)} className={`${field} mt-1.5 text-base`} />
         </label>
         <label className="block text-xs text-sand">
-          {t.artist}
+          {labels.singer}
           <input value={artist} onChange={(event) => setArtist(event.target.value)} className={`${field} mt-1.5 text-base`} />
+        </label>
+        <label className="block text-xs text-sand">
+          {labels.firstPerformed}
+          <input
+            value={firstPerformed}
+            onChange={(event) => setFirstPerformed(event.target.value)}
+            className={`${field} mt-1.5 text-base`}
+          />
+        </label>
+        <label className="block text-xs text-sand">
+          {labels.firstSinger}
+          <input
+            value={firstSinger}
+            onChange={(event) => setFirstSinger(event.target.value)}
+            className={`${field} mt-1.5 text-base`}
+          />
         </label>
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -369,7 +398,7 @@ function SongCard(props: {
           type="button"
           disabled={busy}
           className={primary}
-          onClick={() => void run({ title: title.trim(), artist: artist.trim(), status: isDraft ? "published" : "draft" })}
+          onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
         >
           {isDraft ? t.publish : t.unpublish}
         </button>
@@ -377,12 +406,7 @@ function SongCard(props: {
           {isDraft ? t.test : t.view} ↗
         </a>
         {edited && (
-          <button
-            type="button"
-            disabled={busy}
-            className={quiet}
-            onClick={() => void run({ title: title.trim(), artist: artist.trim() })}
-          >
+          <button type="button" disabled={busy} className={quiet} onClick={() => void run(details)}>
             {t.save}
           </button>
         )}
