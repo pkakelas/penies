@@ -32,7 +32,6 @@ const el = {
     title: "Τραγούδια",
     empty: "Τα πρώτα τραγούδια ανεβαίνουν σύντομα.",
     open: "Άνοιγμα",
-    unknownArtist: "Άγνωστος καλλιτέχνης",
   },
   song: {
     firstPerformed: "Πρώτη εκτέλεση",
@@ -124,7 +123,6 @@ const en: Dict = {
     title: "Songs",
     empty: "The first songs are on their way.",
     open: "Open",
-    unknownArtist: "Unknown artist",
   },
   song: {
     firstPerformed: "First performed",
