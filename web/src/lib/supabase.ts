@@ -18,7 +18,11 @@ export type Song = {
   youtube_id: string;
   youtube_url: string;
   title: string;
+  /** Who sings in this recording. */
   artist: string;
+  /** When the song was first performed: free text, often only a year. */
+  first_performed: string;
+  first_singer: string;
   status: SongStatus;
   step: string;
   step_detail: string;
