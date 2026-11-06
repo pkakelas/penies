@@ -109,11 +109,97 @@ body {
   animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* The song list: a record spins up and settles upright again, and the string
+   between the two singers rings out. A curve flattened to a line at rest,
+   swinging through itself on hover, is what a plucked string looks like. */
+.disc-spin {
+  transition: transform 1.9s cubic-bezier(0.16, 0.8, 0.24, 1);
+}
+.song:hover .disc-spin,
+.song:focus-visible .disc-spin {
+  transform: rotate(720deg);
+}
+/* Light on shellac stays where it is while the record turns under it. */
+.disc-sheen {
+  background: conic-gradient(
+    from 35deg,
+    transparent 0 5%,
+    rgb(243 236 224 / 0.13) 11%,
+    transparent 18% 50%,
+    rgb(243 236 224 / 0.09) 60%,
+    transparent 68%
+  );
+  mix-blend-mode: screen;
+}
+.pluck {
+  transform: scaleY(0.001);
+  transform-origin: 50% 50%;
+}
+.song:hover .pluck,
+.song:focus-visible .pluck {
+  animation: pluck 1.5s ease-out;
+}
+@keyframes pluck {
+  0% {
+    transform: scaleY(0.001);
+  }
+  7% {
+    transform: scaleY(1);
+  }
+  18% {
+    transform: scaleY(-0.8);
+  }
+  31% {
+    transform: scaleY(0.6);
+  }
+  46% {
+    transform: scaleY(-0.4);
+  }
+  63% {
+    transform: scaleY(0.24);
+  }
+  81% {
+    transform: scaleY(-0.1);
+  }
+  100% {
+    transform: scaleY(0.001);
+  }
+}
+
+/* Records roll in as they scroll into view and are upright once fully visible. */
+@keyframes roll {
+  from {
+    transform: translateX(-3rem) rotate(-150deg);
+  }
+  to {
+    transform: none;
+  }
+}
+@supports (animation-timeline: view()) {
+  .disc-roll {
+    animation: roll linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .rise {
+  .rise,
+  .disc-roll {
+    animation: none;
+  }
+  .disc-spin {
+    transition: none;
+  }
+  .song:hover .disc-spin,
+  .song:focus-visible .disc-spin {
+    transform: none;
+  }
+  .song:hover .pluck,
+  .song:focus-visible .pluck {
     animation: none;
   }
 }
