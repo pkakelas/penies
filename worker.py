@@ -46,9 +46,10 @@ from guitar_split import PipelineError
 ROOT = Path(__file__).parent
 WORK = ROOT / "work"  # scratch: one folder per song id while it is processed
 BUCKET = "stems"
-# Stems the site's player needs. no-guitar is left out: it is only the input
-# of the vocal step.
-UPLOADED_STEMS = ("instruments", "rhythm-guitar", "lead-guitar", "vocals")
+# Song folders split before the preset have the rhythm guitar as a file of
+# its own instead of inside instruments. `import` uploads it too, and the
+# site's player adds it to the backing.
+OLD_RHYTHM_STEM = "rhythm-guitar"
 CONTENT_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac"}
 # /admin logins are usernames; Supabase wants an email, so "maria" is stored as
 # maria@<this domain>. Keep in sync with ADMIN_EMAIL_DOMAIN in web/src/lib/supabase.ts.
@@ -163,8 +164,7 @@ def free_slug(db: Supabase, wanted: str, song_id: str) -> str:
 
 def upload_stems(db: Supabase, song_id: str, files: dict[str, Path]) -> dict[str, str]:
     paths = {}
-    for name in UPLOADED_STEMS:
-        file = files[name]
+    for name, file in files.items():
         paths[name] = f"{song_id}/{name}{file.suffix}"
         print(f"  uploading {file.name} ({file.stat().st_size / 1e6:.1f} MB)")
         db.upload(paths[name], file)
@@ -257,9 +257,10 @@ def run(db: Supabase, once: bool) -> None:
 
 def import_folder(db: Supabase, folder: Path, url: str, title: str, artist: str, publish: bool) -> None:
     """Upload a song folder made by guitar_split.py as a draft (or published) song."""
-    files = guitar_split.find_stems(folder, dict.fromkeys(UPLOADED_STEMS))
+    files = guitar_split.find_stems(folder)
     if not files:
-        sys.exit(f"error: {folder} needs these files: {', '.join(UPLOADED_STEMS)}")
+        sys.exit(f"error: {folder} needs these files: {', '.join(guitar_split.STEMS)}")
+    files.update(guitar_split.find_stems(folder, (OLD_RHYTHM_STEM,)) or {})
     video = youtube_id(url)
     if db.songs(youtube_id=f"eq.{video}"):
         sys.exit(f"error: a song for video {video} is already on the site")

@@ -66,7 +66,7 @@
 <script src="SignalsmithStretch.js"></script>
 <script>
 // How it works: the stems are decoded and mixed into six channels:
-//   channels 0-1: instruments + rhythm-guitar (always heard)
+//   channels 0-1: instruments, plus rhythm-guitar if the folder has one (always heard)
 //   channels 2-3: vocals (heard when "Enable vocals" is on)
 //   channels 4-5: lead-guitar (heard when "Enable mpouzouki" is on)
 // All six are handed to ONE Signalsmith Stretch node (SignalsmithStretch.js,
@@ -74,6 +74,8 @@
 // pitch. One node for everything keeps the stems exactly in sync. It replaces
 // the browser's own speed change, which sounds rough on music when slowed.
 //
+// guitar_split.py now saves three files: the rhythm guitar is inside
+// instruments. Older folders have five, with rhythm-guitar on its own.
 // A folder without separate vocals/instruments files still works: its
 // no-guitar file (which contains the vocals) becomes the backing and the
 // vocals toggle is switched off.
@@ -210,8 +212,9 @@ async function loadFiles(files) {
   // With separate vocals + instruments files the vocals get their own toggle;
   // otherwise no-guitar (vocals included) is the backing.
   const hasVocals = Boolean(found['vocals'] && found['instruments']);
-  const needed = ['rhythm-guitar', 'lead-guitar', ...(hasVocals ? ['vocals', 'instruments'] : ['no-guitar'])];
+  const needed = ['lead-guitar', ...(hasVocals ? ['vocals', 'instruments'] : ['no-guitar'])];
   const missing = needed.filter((stem) => !found[stem]);
+  if (found['rhythm-guitar']) needed.push('rhythm-guitar');
   if (missing.length) {
     setStatus(`This folder is missing: ${missing.join(', ')}.`, true);
     return;
@@ -223,9 +226,8 @@ async function loadFiles(files) {
     const decoded = Object.fromEntries(await Promise.all(
       needed.map(async (stem) => [stem, await ctx.decodeAudioData(await found[stem].arrayBuffer())])
     ));
-    const channels = mixChannels(hasVocals
-      ? [[decoded['instruments'], decoded['rhythm-guitar']], [decoded['vocals']], [decoded['lead-guitar']]]
-      : [[decoded['no-guitar'], decoded['rhythm-guitar']], [], [decoded['lead-guitar']]]);
+    const backing = [decoded[hasVocals ? 'instruments' : 'no-guitar'], decoded['rhythm-guitar']].filter(Boolean);
+    const channels = mixChannels([backing, hasVocals ? [decoded['vocals']] : [], [decoded['lead-guitar']]]);
     duration = channels[0].length / ctx.sampleRate;
     await stretch.dropBuffers(); // forget the previous song
     // Hand the channels over to the stretcher (moved, not copied).

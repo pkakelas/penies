@@ -82,8 +82,7 @@ const el = {
     queuedHelp: "Περιμένει τον worker. Αν δεν προχωρά, τρέξε στον υπολογιστή: uv run worker.py",
     steps: {
       download: "Λήψη από το YouTube",
-      guitar: "Διαχωρισμός μπουζουκιού",
-      vocals: "Διαχωρισμός φωνής",
+      split: "Διαχωρισμός καναλιών",
       upload: "Ανέβασμα καναλιών",
     } as Record<string, string>,
     failed: "Απέτυχε",
@@ -170,8 +169,7 @@ const en: Dict = {
     queuedHelp: "Waiting for the worker. If it does not move, run on the computer: uv run worker.py",
     steps: {
       download: "Downloading from YouTube",
-      guitar: "Separating the bouzouki",
-      vocals: "Separating the vocals",
+      split: "Separating the parts",
       upload: "Uploading the parts",
     },
     failed: "Failed",
