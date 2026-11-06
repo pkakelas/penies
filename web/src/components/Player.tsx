@@ -146,7 +146,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
               <rect x="13.8" y="5" width="4.2" height="14" rx="1.2" fill="currentColor" />
             </svg>
           ) : (
-            <svg viewBox="0 0 24 24" className="h-8 w-8 translate-x-0.5" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-8 w-8" aria-hidden="true">
               <path d="M8 5.6v12.8c0 .8.9 1.3 1.6.9l10-6.4c.6-.4.6-1.400 0-1.800l-10-6.400c-.7-.4-1.600.1-1.600.9Z" fill="currentColor" />
             </svg>
           )}
