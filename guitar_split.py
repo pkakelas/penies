@@ -71,7 +71,7 @@ VOCAL_MODELS = [
 VOCAL_OVERLAPS = {"50": 2, "87.5": 8}  # add_opt2; 87.5% costs more
 VOCAL_STEMS = {
     "vocals": ("vocals",),
-    "instruments": ("instrumental", "other"),
+    "instruments": ("instrumental", "instrum", "other"),
 }
 
 
