@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/next";
 import { Commissioner, Noto_Serif_Display } from "next/font/google";
 import type { Lang } from "@/lib/i18n";
 import "@/app/globals.css";
@@ -19,7 +20,10 @@ const body = Commissioner({
 export function RootShell({ lang, children }: { lang: Lang; children: React.ReactNode }) {
   return (
     <html lang={lang} className={`${display.variable} ${body.variable} antialiased`}>
-      <body className="flex min-h-dvh flex-col">{children}</body>
+      <body className="flex min-h-dvh flex-col">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
