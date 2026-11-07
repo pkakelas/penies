@@ -3,8 +3,8 @@
 import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { refreshSongs } from "@/app/actions";
-import { dictionaries, formatTime, href, type Dict, type Lang } from "@/lib/i18n";
-import { ADMIN_EMAIL_DOMAIN, STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
+import { dictionaries, formatTime, formatTimeExact, href, parseTime, type Dict, type Lang } from "@/lib/i18n";
+import { ADMIN_EMAIL_DOMAIN, orderSongs, playableLength, STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
 
 const POLL_MS = 4000;
 
@@ -174,7 +174,18 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
 
   const inProgress = songs?.filter((song) => ["queued", "processing", "failed"].includes(song.status)) ?? [];
   const drafts = songs?.filter((song) => song.status === "draft") ?? [];
-  const published = songs?.filter((song) => song.status === "published") ?? [];
+  // In the landing page's order, so moving a song here moves it there.
+  const published = orderSongs(songs?.filter((song) => song.status === "published") ?? []);
+
+  /** Swap a published song with its neighbour, then number the whole list from 1. */
+  const move = (song: Song, by: -1 | 1) => {
+    const from = published.findIndex((s) => s.id === song.id);
+    const to = from + by;
+    if (from < 0 || to < 0 || to >= published.length) return Promise.resolve(false);
+    const ids = published.map((s) => s.id);
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    return change(() => supabaseBrowser().rpc("reorder_songs", { ids }));
+  };
 
   return (
     <>
@@ -232,9 +243,20 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
             ))}
           </Section>
 
-          <Section title={t.published} count={published.length} none={t.none}>
-            {published.map((song) => (
-              <SongCard key={song.id} lang={lang} song={song} onUpdate={update} onRemove={remove} />
+          <Section title={t.published} count={published.length} none={t.none} help={t.orderHelp}>
+            {published.map((song, index) => (
+              <SongCard
+                key={song.id}
+                lang={lang}
+                song={song}
+                onUpdate={update}
+                onRemove={remove}
+                order={{
+                  number: index + 1,
+                  up: index > 0 ? () => move(song, -1) : undefined,
+                  down: index < published.length - 1 ? () => move(song, 1) : undefined,
+                }}
+              />
             ))}
           </Section>
         </>
@@ -243,13 +265,14 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
   );
 }
 
-function Section(props: { title: string; count: number; none?: string; children: React.ReactNode }) {
+function Section(props: { title: string; count: number; none?: string; help?: string; children: React.ReactNode }) {
   return (
     <section className="mt-14">
       <h2 className="flex items-baseline gap-3 text-xs font-medium tracking-[0.28em] text-brass uppercase">
         {props.title}
         <span className="tracking-normal text-sand tabular-nums">{props.count}</span>
       </h2>
+      {props.help && props.count > 1 && <p className="mt-2 text-sm text-sand/70">{props.help}</p>}
       {props.count === 0 ? (
         <p className="mt-5 text-sand">{props.none}</p>
       ) : (
@@ -331,42 +354,81 @@ function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void
   );
 }
 
-/** A finished song: fix its details, listen to it, publish it or take it down. */
+/** Where a published song sits in the list, and how to move it; a direction is missing at the ends. */
+type Order = { number: number; up?: () => Promise<boolean>; down?: () => Promise<boolean> };
+
+/** A finished song: fix its details, listen to it, publish it or take it down. Published songs can be moved in the list. */
 function SongCard(props: {
   lang: Lang;
   song: Song;
   onUpdate: (song: Song, fields: Partial<Song>) => Promise<boolean>;
   onRemove: (song: Song) => void;
+  order?: Order;
 }) {
-  const { lang, song, onUpdate, onRemove } = props;
+  const { lang, song, onUpdate, onRemove, order } = props;
   const t = dictionaries[lang].admin;
   const labels = dictionaries[lang].song;
   const [title, setTitle] = useState(song.title);
   const [artist, setArtist] = useState(song.artist);
   const [firstPerformed, setFirstPerformed] = useState(song.first_performed);
   const [firstSinger, setFirstSinger] = useState(song.first_singer);
+  // Where the song starts and ends, as typed (m:ss); blank means the recording's own start or end.
+  const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
+  const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
   const [busy, setBusy] = useState(false);
   const isDraft = song.status === "draft";
+  const tenths = (seconds: number | null) => (seconds === null ? null : Math.round(seconds * 10) / 10);
+  const start = tenths(parseTime(startsAt));
+  const end = tenths(parseTime(endsAt));
+  const full = song.duration_seconds;
+  const badTrim =
+    Number.isNaN(start) ||
+    Number.isNaN(end) ||
+    (start !== null && end !== null && start >= end) ||
+    (full !== null && ((start !== null && start >= full) || (end !== null && end > full + 1)));
   const details = {
     title: title.trim(),
     artist: artist.trim(),
     first_performed: firstPerformed.trim(),
     first_singer: firstSinger.trim(),
+    start_seconds: badTrim ? song.start_seconds : start,
+    end_seconds: badTrim ? song.end_seconds : end,
   };
   const edited =
     details.title !== song.title ||
     details.artist !== song.artist ||
     details.first_performed !== song.first_performed ||
-    details.first_singer !== song.first_singer;
+    details.first_singer !== song.first_singer ||
+    details.start_seconds !== song.start_seconds ||
+    details.end_seconds !== song.end_seconds;
+  const length = badTrim ? null : playableLength({ ...song, start_seconds: start, end_seconds: end });
 
   const run = async (fields: Partial<Song>) => {
     setBusy(true);
     await onUpdate(song, fields);
     setBusy(false);
   };
+  const moveWith = async (step: () => Promise<boolean>) => {
+    setBusy(true);
+    await step();
+    setBusy(false);
+  };
 
   return (
     <li className="rounded-2xl border border-line bg-coal p-5 sm:p-6">
+      {order && (
+        <div className="mb-4 flex items-center gap-1">
+          <span className="font-display text-2xl text-brass tabular-nums">{String(order.number).padStart(2, "0")}</span>
+          <span className="ml-auto flex gap-1">
+            <OrderButton label={t.moveUp} onClick={order.up && (() => moveWith(order.up!))} disabled={busy}>
+              ↑
+            </OrderButton>
+            <OrderButton label={t.moveDown} onClick={order.down && (() => moveWith(order.down!))} disabled={busy}>
+              ↓
+            </OrderButton>
+          </span>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs text-sand">
           {t.songTitle}
@@ -393,10 +455,37 @@ function SongCard(props: {
           />
         </label>
       </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs text-sand">
+          {t.startsAt}
+          <input
+            value={startsAt}
+            onChange={(event) => setStartsAt(event.target.value)}
+            placeholder="0:00"
+            inputMode="numeric"
+            aria-invalid={badTrim}
+            className={`${field} mt-1.5 text-base tabular-nums`}
+          />
+        </label>
+        <label className="block text-xs text-sand">
+          {t.endsAt}
+          <input
+            value={endsAt}
+            onChange={(event) => setEndsAt(event.target.value)}
+            placeholder={full ? formatTime(full) : "–"}
+            inputMode="numeric"
+            aria-invalid={badTrim}
+            className={`${field} mt-1.5 text-base tabular-nums`}
+          />
+        </label>
+        <p className={`text-xs sm:col-span-2 ${badTrim ? "text-wine" : "text-sand/70"}`} role={badTrim ? "alert" : undefined}>
+          {badTrim ? t.badTime : t.trimHelp}
+        </p>
+      </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || badTrim}
           className={primary}
           onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
         >
@@ -406,17 +495,36 @@ function SongCard(props: {
           {isDraft ? t.test : t.view} ↗
         </a>
         {edited && (
-          <button type="button" disabled={busy} className={quiet} onClick={() => void run(details)}>
+          <button type="button" disabled={busy || badTrim} className={quiet} onClick={() => void run(details)}>
             {t.save}
           </button>
         )}
-        {song.duration_seconds ? (
-          <span className="ml-2 text-sm text-sand tabular-nums">{formatTime(song.duration_seconds)}</span>
+        {length ? (
+          <span className="ml-2 text-sm text-sand tabular-nums">
+            {t.plays} {formatTime(length)}
+            {full && Math.round(length) !== Math.round(full) ? ` / ${formatTime(full)}` : ""}
+          </span>
         ) : null}
         <button type="button" disabled={busy} className={`${danger} ml-auto`} onClick={() => onRemove(song)}>
           {t.remove}
         </button>
       </div>
     </li>
+  );
+}
+
+/** An arrow that moves a song in the list. Without onClick it is at the end of the list and greyed out. */
+function OrderButton(props: { label: string; onClick?: () => void; disabled: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={props.label}
+      title={props.label}
+      disabled={props.disabled || !props.onClick}
+      onClick={props.onClick}
+      className="grid h-9 w-9 place-items-center rounded-full border border-line text-sand transition-colors hover:border-cream/40 hover:text-cream disabled:opacity-30 disabled:hover:border-line disabled:hover:text-sand"
+    >
+      {props.children}
+    </button>
   );
 }

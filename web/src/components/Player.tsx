@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { StemEngine, type StemFiles } from "@/lib/engine";
 import { dictionaries, formatTime, type Lang } from "@/lib/i18n";
-import { STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
+import { playableLength, playableRange, STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
 
 const STEMS = ["instruments", "rhythm-guitar", "lead-guitar", "vocals"] as const;
 const MIN_SPEED = 50;
@@ -27,7 +27,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const [fetched, setFetched] = useState(0); // stems downloaded so far
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(song.duration_seconds ?? 0);
+  const [duration, setDuration] = useState(playableLength(song) ?? 0);
   const [lead, setLead] = useState(false);
   const [vocals, setVocals] = useState(true);
   const [speed, setSpeed] = useState(100);
@@ -49,7 +49,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
         }),
       );
       if (cancelled) return;
-      const created = await StemEngine.create(files as StemFiles, { vocals: true, lead: false });
+      const created = await StemEngine.create(files as StemFiles, { vocals: true, lead: false }, playableRange(song));
       if (cancelled) return created.destroy();
       engine.current = created;
       setDuration(created.duration);
@@ -63,7 +63,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
       engine.current?.destroy();
       engine.current = null;
     };
-  }, [song.stems]);
+  }, [song]);
 
   // Keep the engine in step with the controls.
   useEffect(() => {

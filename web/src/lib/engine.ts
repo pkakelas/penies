@@ -51,7 +51,11 @@ export type StemFiles = {
   vocals?: ArrayBuffer;
 };
 
+/** The part of the recording to play, in seconds. Missing or null means the recording's own start or end. */
+export type PlayRange = { start?: number | null; end?: number | null };
+
 export class StemEngine {
+  /** Length of what is played, in seconds (after trimming to the range). */
   duration = 0;
   playing = false;
 
@@ -70,8 +74,15 @@ export class StemEngine {
     this.ctx = new AudioContext();
   }
 
-  /** Decode the stems and get ready to play. Works before any click; sound starts on play(). */
-  static async create(files: StemFiles, levels: { vocals: boolean; lead: boolean }): Promise<StemEngine> {
+  /**
+   * Decode the stems and get ready to play. Works before any click; sound starts on play().
+   * With a `range`, only that part of the recording is kept: position 0 is its start.
+   */
+  static async create(
+    files: StemFiles,
+    levels: { vocals: boolean; lead: boolean },
+    range: PlayRange = {},
+  ): Promise<StemEngine> {
     const engine = new StemEngine();
     try {
       await loadLibrary();
@@ -110,11 +121,11 @@ export class StemEngine {
         decode(files["lead-guitar"]),
         files.vocals ? decode(files.vocals) : null,
       ]);
-      const channels = mixChannels([
-        rhythm ? [instruments, rhythm] : [instruments],
-        voice ? [voice] : [],
-        [leadGuitar],
-      ]);
+      const channels = mixChannels(
+        [rhythm ? [instruments, rhythm] : [instruments], voice ? [voice] : [], [leadGuitar]],
+        range,
+        ctx.sampleRate,
+      );
       engine.duration = channels[0].length / ctx.sampleRate;
       // Hand the channels over to the stretcher (moved, not copied).
       await node.addBuffers(channels, channels.map((channel) => channel.buffer as ArrayBuffer));
@@ -194,22 +205,36 @@ export class StemEngine {
   }
 }
 
-// Mix decoded stems into six equally long channels. `groups` holds three
-// lists of AudioBuffers (backing, vocals, lead); each list is summed into one
-// stereo pair, and an empty list leaves its pair silent.
-function mixChannels(groups: AudioBuffer[][]): Float32Array[] {
-  const frames = Math.min(...groups.flat().map((buffer) => buffer.length));
+// Mix decoded stems into six equally long channels, keeping only the frames
+// inside `range`. `groups` holds three lists of AudioBuffers (backing, vocals,
+// lead); each list is summed into one stereo pair, and an empty list leaves
+// its pair silent.
+function mixChannels(groups: AudioBuffer[][], range: PlayRange, sampleRate: number): Float32Array[] {
+  const total = Math.min(...groups.flat().map((buffer) => buffer.length));
+  const { from, to } = trimFrames(range, total, sampleRate);
+  const frames = to - from;
   const side = (buffer: AudioBuffer, i: number) =>
     buffer.getChannelData(Math.min(i, buffer.numberOfChannels - 1));
   return groups.flatMap((buffers) =>
     [0, 1].map((s) => {
       const out = new Float32Array(frames);
       buffers.forEach((buffer, n) => {
-        const data = side(buffer, s);
-        if (n === 0) out.set(data.subarray(0, frames));
+        const data = side(buffer, s).subarray(from, to);
+        if (n === 0) out.set(data);
         else for (let i = 0; i < frames; i++) out[i] += data[i];
       });
       return out;
     }),
   );
+}
+
+// The first and last frame to keep. A range that leaves less than a second,
+// or lies outside the recording, is ignored and the whole recording is kept.
+function trimFrames(range: PlayRange, total: number, sampleRate: number): { from: number; to: number } {
+  const start = Math.max(0, range.start ?? 0);
+  const end = range.end ?? Infinity;
+  const from = Math.min(total, Math.round(start * sampleRate));
+  const to = Math.min(total, Math.round(end * sampleRate));
+  if (to - from < sampleRate) return { from: 0, to: total };
+  return { from, to };
 }

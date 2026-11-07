@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { dictionaries, formatTime, href, SITE_NAME, type Lang } from "@/lib/i18n";
 import { getPublishedSongs } from "@/lib/songs";
-import type { Song } from "@/lib/supabase";
+import { playableLength, type Song } from "@/lib/supabase";
 
 // Old record labels came in a few colours; each song takes the next one.
 const LABELS = [
@@ -82,9 +82,9 @@ function Disc({ lang, song, number }: { lang: Lang; song: Song; number: number }
             >
               {date}
             </text>
-            {song.duration_seconds ? (
+            {playableLength(song) ? (
               <text x="100" y="125" textAnchor="middle" className="text-[12px] tabular-nums">
-                {formatTime(song.duration_seconds)}
+                {formatTime(playableLength(song)!)}
               </text>
             ) : null}
             <text className="text-[11px] tracking-[0.1em]">

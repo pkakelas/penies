@@ -16,6 +16,28 @@ export function formatTime(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** m:ss, keeping tenths of a second when there are any (for the admin's trim fields). */
+export function formatTimeExact(seconds: number): string {
+  const tenths = Math.round(Math.max(0, seconds) * 10);
+  const whole = formatTime(tenths / 10);
+  return tenths % 10 ? `${whole}.${tenths % 10}` : whole;
+}
+
+/**
+ * Seconds from text typed as "m:ss", "m:ss.s" or plain seconds.
+ * Blank gives null; anything else that is not a time gives NaN.
+ */
+export function parseTime(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const match = /^(?:(\d+):)?(\d+(?:[.,]\d+)?)$/.exec(trimmed);
+  if (!match) return NaN;
+  const minutes = match[1] ? Number(match[1]) : 0;
+  const seconds = Number(match[2].replace(",", "."));
+  if (match[1] && seconds >= 60) return NaN;
+  return minutes * 60 + seconds;
+}
+
 const el = {
   meta: {
     title: "Πενιά — backing tracks για μπουζούκι",
@@ -92,6 +114,14 @@ const el = {
     failed: "Απέτυχε",
     retry: "Νέα προσπάθεια",
     songTitle: "Τίτλος",
+    startsAt: "Αρχή",
+    endsAt: "Τέλος",
+    trimHelp: "Σε λεπτά:δευτερόλεπτα από την αρχή της ηχογράφησης. Κενό: ολόκληρη.",
+    badTime: "Γράψε χρόνο όπως 1:23. Η αρχή πρέπει να είναι πριν από το τέλος και μέσα στο τραγούδι.",
+    plays: "Παίζει",
+    moveUp: "Πιο πάνω στη λίστα",
+    moveDown: "Πιο κάτω στη λίστα",
+    orderHelp: "Με αυτή τη σειρά εμφανίζονται στην αρχική σελίδα.",
     save: "Αποθήκευση",
     saved: "Αποθηκεύτηκε",
     test: "Δοκιμή",
@@ -182,6 +212,14 @@ const en: Dict = {
     failed: "Failed",
     retry: "Try again",
     songTitle: "Title",
+    startsAt: "Starts at",
+    endsAt: "Ends at",
+    trimHelp: "In minutes:seconds from the start of the recording. Blank: the whole recording.",
+    badTime: "Write a time like 1:23. The start must come before the end and lie within the song.",
+    plays: "Plays",
+    moveUp: "Move up the list",
+    moveDown: "Move down the list",
+    orderHelp: "This is the order on the landing page.",
     save: "Save",
     saved: "Saved",
     test: "Test",

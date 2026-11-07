@@ -12,6 +12,8 @@ export async function getPublishedSongs(): Promise<Song[]> {
     .from("songs")
     .select("*")
     .eq("status", "published")
+    // The same order as orderSongs() in supabase.ts, which /admin uses.
+    .order("sort_order", { ascending: true, nullsFirst: true })
     .order("published_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data as Song[];
