@@ -25,6 +25,8 @@ export type Song = {
   first_singer: string;
   /** No singer: the song has no vocals stem, and artist/first_singer say who plays. */
   instrumental: boolean;
+  /** Who wrote the music. */
+  composer: string;
   status: SongStatus;
   step: string;
   step_detail: string;

@@ -35,7 +35,7 @@ export async function SongList({ lang }: { lang: Lang }) {
               →
             </span>
             <Disc lang={lang} song={song} number={i + 1} />
-            <Voices lang={lang} song={song} />
+            <Credits lang={lang} song={song} />
             <span className="sr-only">{t.songs.open}</span>
           </Link>
         </li>
@@ -101,42 +101,27 @@ function Disc({ lang, song, number }: { lang: Lang; song: Song; number: number }
   );
 }
 
-/** From the first singer to the one in this recording, along a string that rings on hover. */
-function Voices({ lang, song }: { lang: Lang; song: Song }) {
+/** Liner notes: the composer and year on one line, then who sang it first and who sings here. */
+function Credits({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang];
+  const head = [song.composer, song.first_performed].filter(Boolean).join(" · ");
   return (
-    <span className="col-span-2 flex flex-col gap-3 border-l border-brass/30 pl-4 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:flex-row sm:items-end sm:gap-4 sm:self-start sm:border-0 sm:pl-0">
-      <dl className="contents">
-        <div className="sr-only">
-          <dt>{t.song.firstPerformed}</dt>
-          <dd>{song.first_performed || "—"}</dd>
-        </div>
-        <Voice label={song.instrumental ? t.song.firstPlayer : t.song.firstSinger} value={song.first_singer} />
-        <Voice label={t.song.singer} value={song.artist} last />
+    <div className="col-span-2 border-l border-brass/30 pl-4 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:self-start sm:border-0 sm:pl-0">
+      {head && <p className="text-sm text-cream/85 sm:text-base">{head}</p>}
+      <dl className="mt-2.5 flex flex-col gap-2.5 text-sm sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-1">
+        <Credit label={song.instrumental ? t.song.firstPlayer : t.song.firstSinger} value={song.first_singer} />
+        <Credit label={t.song.singer} value={song.artist} />
       </dl>
-      <span aria-hidden="true" className="relative order-2 hidden h-6 min-w-10 flex-1 sm:block">
-        <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
-          <path
-            className="pluck"
-            d="M 0 10 Q 50 26 100 10"
-            fill="none"
-            stroke="var(--color-brass)"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-        <span className="absolute top-1/2 left-0 size-1 -translate-y-1/2 rounded-full bg-brass" />
-        <span className="absolute top-1/2 right-0 size-1 -translate-y-1/2 rounded-full bg-brass" />
-      </span>
-    </span>
+    </div>
   );
 }
 
-function Voice({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
+function Credit({ label, value }: { label: string; value: string }) {
+  if (!value) return null;
   return (
-    <div className={last ? "order-3 min-w-0 sm:max-w-[48%] sm:text-right" : "order-1 min-w-0 sm:max-w-[48%]"}>
-      <dt className="text-xs text-sand">{label}</dt>
-      <dd className="mt-0.5 text-sm text-cream">{value || "—"}</dd>
+    <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+      <dt className="shrink-0 text-[10.5px] tracking-[0.14em] uppercase text-brass/75">{label}</dt>
+      <dd className="text-cream">{value}</dd>
     </div>
   );
 }

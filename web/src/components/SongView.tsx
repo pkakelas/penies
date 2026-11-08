@@ -7,8 +7,9 @@ import { Player } from "./Player";
 export function SongView({ lang, song, draft = false }: { lang: Lang; song: Song; draft?: boolean }) {
   const t = dictionaries[lang];
   const details = [
+    { label: t.song.composer, value: song.composer },
     { label: t.song.firstPerformed, value: song.first_performed },
-    { label: t.song.firstSinger, value: song.first_singer },
+    { label: song.instrumental ? t.song.firstPlayer : t.song.firstSinger, value: song.first_singer },
     { label: t.song.singer, value: song.artist },
   ].filter((detail) => detail.value);
   return (

@@ -61,6 +61,7 @@ const el = {
     firstPlayer: "Πρώτη ερμηνεία",
     singer: "Σε αυτή την εκτέλεση",
     instrumental: "Ορχηστρικό",
+    composer: "Μουσική",
   },
   player: {
     back: "Όλα τα τραγούδια",
@@ -163,6 +164,7 @@ const en: Dict = {
     firstPlayer: "First played by",
     singer: "In this recording",
     instrumental: "Instrumental",
+    composer: "Music",
   },
   player: {
     back: "All songs",
