@@ -27,6 +27,9 @@ export async function SongList({ lang }: { lang: Lang }) {
           >
             <span className="col-span-2 font-display text-2xl leading-tight transition-colors group-hover:text-brass-bright sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-end sm:text-4xl lg:text-[2.75rem]">
               {song.title || t.admin.untitled}
+              {song.composer && (
+                <span className="mt-1.5 block font-sans text-sm leading-snug text-sand">{song.composer}</span>
+              )}
             </span>
             <span
               aria-hidden="true"

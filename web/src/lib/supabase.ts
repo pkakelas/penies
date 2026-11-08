@@ -23,6 +23,8 @@ export type Song = {
   /** When the song was first performed: free text, often only a year. */
   first_performed: string;
   first_singer: string;
+  /** Who wrote the music. */
+  composer: string;
   status: SongStatus;
   step: string;
   step_detail: string;

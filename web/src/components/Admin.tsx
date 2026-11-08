@@ -372,6 +372,7 @@ function SongCard(props: {
   const [artist, setArtist] = useState(song.artist);
   const [firstPerformed, setFirstPerformed] = useState(song.first_performed);
   const [firstSinger, setFirstSinger] = useState(song.first_singer);
+  const [composer, setComposer] = useState(song.composer);
   // Where the song starts and ends, as typed (m:ss); blank means the recording's own start or end.
   const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
   const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
@@ -391,6 +392,7 @@ function SongCard(props: {
     artist: artist.trim(),
     first_performed: firstPerformed.trim(),
     first_singer: firstSinger.trim(),
+    composer: composer.trim(),
     start_seconds: badTrim ? song.start_seconds : start,
     end_seconds: badTrim ? song.end_seconds : end,
   };
@@ -399,6 +401,7 @@ function SongCard(props: {
     details.artist !== song.artist ||
     details.first_performed !== song.first_performed ||
     details.first_singer !== song.first_singer ||
+    details.composer !== song.composer ||
     details.start_seconds !== song.start_seconds ||
     details.end_seconds !== song.end_seconds;
   const length = badTrim ? null : playableLength({ ...song, start_seconds: start, end_seconds: end });
@@ -453,6 +456,10 @@ function SongCard(props: {
             onChange={(event) => setFirstSinger(event.target.value)}
             className={`${field} mt-1.5 text-base`}
           />
+        </label>
+        <label className="block text-xs text-sand">
+          {labels.composer}
+          <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
         </label>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
