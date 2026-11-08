@@ -23,6 +23,8 @@ export type Song = {
   /** When the song was first performed: free text, often only a year. */
   first_performed: string;
   first_singer: string;
+  /** No singer: the song has no vocals stem, and artist/first_singer say who plays. */
+  instrumental: boolean;
   status: SongStatus;
   step: string;
   step_detail: string;

@@ -9,6 +9,13 @@ const STEMS = ["instruments", "rhythm-guitar", "lead-guitar", "vocals"] as const
 const MIN_SPEED = 50;
 const MAX_SPEED = 150;
 
+/**
+ * The stems a song is played from. An instrumental's vocals stem, if one was
+ * uploaded, is only noise and is left out.
+ */
+const stemNames = (song: Song) =>
+  STEMS.filter((name) => song.stems[name] && !(name === "vocals" && song.instrumental));
+
 /** How far along a slider is, for its brass fill. */
 const fill = (value: number, min: number, max: number) =>
   ({ "--fill": `${max > min ? ((value - min) / (max - min)) * 100 : 0}%` }) as CSSProperties;
@@ -20,8 +27,8 @@ const fill = (value: number, min: number, max: number) =>
 export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang].player;
   const engine = useRef<StemEngine | null>(null);
-  const names = STEMS.filter((name) => song.stems[name]);
-  const hasVocals = Boolean(song.stems.vocals);
+  const names = stemNames(song);
+  const hasVocals = names.includes("vocals");
 
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [fetched, setFetched] = useState(0); // stems downloaded so far
@@ -39,10 +46,8 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
     const load = async () => {
       const files: Partial<Record<(typeof STEMS)[number], ArrayBuffer>> = {};
       await Promise.all(
-        STEMS.map(async (name) => {
-          const path = song.stems[name];
-          if (!path) return;
-          const { data, error } = await storage.download(path);
+        stemNames(song).map(async (name) => {
+          const { data, error } = await storage.download(song.stems[name]);
           if (error) throw error;
           files[name] = await data.arrayBuffer();
           if (!cancelled) setFetched((n) => n + 1);
@@ -198,7 +203,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
         <Switch label={t.bouzouki} detail={lead ? t.bouzoukiOn : t.bouzoukiOff} checked={lead} onChange={setLead} />
         <Switch
           label={t.vocals}
-          detail={!hasVocals ? t.noVocals : vocals ? t.vocalsOn : t.vocalsOff}
+          detail={song.instrumental ? t.instrumental : !hasVocals ? t.noVocals : vocals ? t.vocalsOn : t.vocalsOff}
           checked={hasVocals && vocals}
           disabled={!hasVocals}
           onChange={setVocals}

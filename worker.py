@@ -162,8 +162,15 @@ def free_slug(db: Supabase, wanted: str, song_id: str) -> str:
 
 # --- Processing --------------------------------------------------------------
 
-def upload_stems(db: Supabase, song_id: str, files: dict[str, Path]) -> dict[str, str]:
+def upload_stems(db: Supabase, song_id: str, files: dict[str, Path], instrumental: bool) -> dict[str, str]:
+    """Upload the stem files; an instrumental's vocals stem is left out.
+
+    The preset always makes a vocals stem. For an instrumental it is only noise,
+    and the player shows no vocals switch when a song has none.
+    """
     paths = {}
+    if instrumental:
+        files = {name: file for name, file in files.items() if name != "vocals"}
     for name, file in files.items():
         paths[name] = f"{song_id}/{name}{file.suffix}"
         print(f"  uploading {file.name} ({file.stat().st_size / 1e6:.1f} MB)")
@@ -208,7 +215,7 @@ def process(db: Supabase, song: dict) -> None:
 
         files = guitar_split.split_song(song["youtube_url"], WORK / song_id, report=report)
         report("upload", "uploading the stems...")
-        stems = upload_stems(db, song_id, files)
+        stems = upload_stems(db, song_id, files, song.get("instrumental", False))
         db.update_song(
             song_id,
             {"status": "draft", "stems": stems, "step": "", "step_detail": "", "error": ""},
@@ -255,7 +262,9 @@ def run(db: Supabase, once: bool) -> None:
 
 # --- Other commands ----------------------------------------------------------
 
-def import_folder(db: Supabase, folder: Path, url: str, title: str, artist: str, publish: bool) -> None:
+def import_folder(
+    db: Supabase, folder: Path, url: str, title: str, artist: str, instrumental: bool, publish: bool
+) -> None:
     """Upload a song folder made by guitar_split.py as a draft (or published) song."""
     files = guitar_split.find_stems(folder)
     if not files:
@@ -270,11 +279,12 @@ def import_folder(db: Supabase, folder: Path, url: str, title: str, artist: str,
         "slug": video.lower(),
         "title": title,
         "artist": artist,
+        "instrumental": instrumental,
         "status": "processing",
         "step": "upload",
     })
     details = describe(db, song, guitar_split.video_info(url))
-    stems = upload_stems(db, song["id"], files)
+    stems = upload_stems(db, song["id"], files, instrumental)
     db.update_song(song["id"], {**details, "stems": stems, "status": "draft", "step": ""})
     if publish:
         db.update_song(song["id"], {"status": "published"})
@@ -323,6 +333,7 @@ def main() -> None:
     imported.add_argument("--url", required=True, help="the song's YouTube link")
     imported.add_argument("--title", default="", help="song title (default: from the video)")
     imported.add_argument("--artist", default="", help="artist (default: from the video)")
+    imported.add_argument("--instrumental", action="store_true", help="no singer: the vocals stem is left out")
     imported.add_argument("--publish", action="store_true", help="publish it right away")
     args = parser.parse_args()
 
@@ -331,7 +342,7 @@ def main() -> None:
         if args.command == "add-admin":
             add_admin(db, args.username)
         elif args.command == "import":
-            import_folder(db, args.folder, args.url, args.title, args.artist, args.publish)
+            import_folder(db, args.folder, args.url, args.title, args.artist, args.instrumental, args.publish)
         else:
             run(db, once=args.command == "once")
     except PipelineError as error:

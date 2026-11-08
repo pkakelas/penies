@@ -15,6 +15,7 @@ const primary =
 const quiet =
   "rounded-full border border-line px-5 py-2.5 text-sm text-cream transition-colors hover:border-cream/40 disabled:opacity-50";
 const danger = "rounded-full px-3 py-2.5 text-sm text-sand transition-colors hover:text-wine disabled:opacity-50";
+const checkbox = "size-4 rounded border-line bg-ink accent-brass";
 
 /** The 11-character video id in a YouTube link, or null. */
 function youtubeId(input: string): string | null {
@@ -307,6 +308,7 @@ function Progress({ t, song }: { t: Dict["admin"]; song: Song }) {
 
 function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void> }) {
   const [url, setUrl] = useState("");
+  const [instrumental, setInstrumental] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
 
@@ -319,10 +321,11 @@ function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void
     // The worker replaces the address (slug) with one made from the title.
     const { error } = await supabaseBrowser()
       .from("songs")
-      .insert({ youtube_id: id, youtube_url: `https://www.youtube.com/watch?v=${id}`, slug: id });
+      .insert({ youtube_id: id, youtube_url: `https://www.youtube.com/watch?v=${id}`, slug: id, instrumental });
     setBusy(false);
     if (error) return setProblem(error.code === "23505" ? t.duplicate : `${t.failedGeneric} (${error.message})`);
     setUrl("");
+    setInstrumental(false);
     await onAdded();
   };
 
@@ -345,6 +348,15 @@ function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void
           {busy ? t.adding : t.add}
         </button>
       </div>
+      <label className="mt-4 flex items-center gap-2.5 text-sm text-sand">
+        <input
+          type="checkbox"
+          checked={instrumental}
+          onChange={(event) => setInstrumental(event.target.checked)}
+          className={checkbox}
+        />
+        {t.instrumental}
+      </label>
       {problem && (
         <p role="alert" className="mt-4 text-sm text-wine">
           {problem}
@@ -372,6 +384,7 @@ function SongCard(props: {
   const [artist, setArtist] = useState(song.artist);
   const [firstPerformed, setFirstPerformed] = useState(song.first_performed);
   const [firstSinger, setFirstSinger] = useState(song.first_singer);
+  const [instrumental, setInstrumental] = useState(song.instrumental);
   // Where the song starts and ends, as typed (m:ss); blank means the recording's own start or end.
   const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
   const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
@@ -391,6 +404,7 @@ function SongCard(props: {
     artist: artist.trim(),
     first_performed: firstPerformed.trim(),
     first_singer: firstSinger.trim(),
+    instrumental,
     start_seconds: badTrim ? song.start_seconds : start,
     end_seconds: badTrim ? song.end_seconds : end,
   };
@@ -399,6 +413,7 @@ function SongCard(props: {
     details.artist !== song.artist ||
     details.first_performed !== song.first_performed ||
     details.first_singer !== song.first_singer ||
+    details.instrumental !== song.instrumental ||
     details.start_seconds !== song.start_seconds ||
     details.end_seconds !== song.end_seconds;
   const length = badTrim ? null : playableLength({ ...song, start_seconds: start, end_seconds: end });
@@ -447,12 +462,21 @@ function SongCard(props: {
           />
         </label>
         <label className="block text-xs text-sand">
-          {labels.firstSinger}
+          {instrumental ? labels.firstPlayer : labels.firstSinger}
           <input
             value={firstSinger}
             onChange={(event) => setFirstSinger(event.target.value)}
             className={`${field} mt-1.5 text-base`}
           />
+        </label>
+        <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={instrumental}
+            onChange={(event) => setInstrumental(event.target.checked)}
+            className={checkbox}
+          />
+          {t.instrumental}
         </label>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

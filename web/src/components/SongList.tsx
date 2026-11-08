@@ -111,7 +111,7 @@ function Voices({ lang, song }: { lang: Lang; song: Song }) {
           <dt>{t.song.firstPerformed}</dt>
           <dd>{song.first_performed || "—"}</dd>
         </div>
-        <Voice label={t.song.firstSinger} value={song.first_singer} />
+        <Voice label={song.instrumental ? t.song.firstPlayer : t.song.firstSinger} value={song.first_singer} />
         <Voice label={t.song.singer} value={song.artist} last />
       </dl>
       <span aria-hidden="true" className="relative order-2 hidden h-6 min-w-10 flex-1 sm:block">

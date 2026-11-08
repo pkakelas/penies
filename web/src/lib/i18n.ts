@@ -58,7 +58,9 @@ const el = {
   song: {
     firstPerformed: "Πρώτη εκτέλεση",
     firstSinger: "Πρώτη ερμηνεία",
+    firstPlayer: "Πρώτη ερμηνεία",
     singer: "Σε αυτή την εκτέλεση",
+    instrumental: "Ορχηστρικό",
   },
   player: {
     back: "Όλα τα τραγούδια",
@@ -73,6 +75,7 @@ const el = {
     vocalsOn: "Ακούγεται η φωνή",
     vocalsOff: "Χωρίς φωνή",
     noVocals: "Αυτό το τραγούδι δεν έχει ξεχωριστή φωνή",
+    instrumental: "Ορχηστρικό — δεν έχει φωνή",
     speed: "Ταχύτητα",
     reset: "Επαναφορά",
     position: "Θέση στο τραγούδι",
@@ -99,6 +102,7 @@ const el = {
     adding: "Προσθήκη…",
     badUrl: "Αυτός δεν μοιάζει με σύνδεσμο βίντεο του YouTube.",
     duplicate: "Αυτό το βίντεο υπάρχει ήδη στη λίστα.",
+    instrumental: "Ορχηστρικό, χωρίς φωνή",
     failedGeneric: "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
     processing: "Σε επεξεργασία",
     drafts: "Πρόχειρα",
@@ -156,7 +160,9 @@ const en: Dict = {
   song: {
     firstPerformed: "First performed",
     firstSinger: "First sung by",
+    firstPlayer: "First played by",
     singer: "In this recording",
+    instrumental: "Instrumental",
   },
   player: {
     back: "All songs",
@@ -171,6 +177,7 @@ const en: Dict = {
     vocalsOn: "The singer is on",
     vocalsOff: "No vocals",
     noVocals: "This song has no separate vocals",
+    instrumental: "Instrumental — no vocals",
     speed: "Speed",
     reset: "Reset",
     position: "Position in the song",
@@ -197,6 +204,7 @@ const en: Dict = {
     adding: "Adding…",
     badUrl: "That does not look like a YouTube video link.",
     duplicate: "That video is already in the list.",
+    instrumental: "Instrumental, no vocals",
     failedGeneric: "Something went wrong. Try again.",
     processing: "Processing",
     drafts: "Drafts",
