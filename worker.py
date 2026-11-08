@@ -247,7 +247,13 @@ def run(db: Supabase, once: bool) -> None:
     resume = True
     try:
         while True:
-            song = next_song(db, resume)
+            try:
+                song = next_song(db, resume)
+            except (requests.RequestException, PipelineError) as error:
+                # Supabase dropped or refused a poll; it is transient, keep watching.
+                print(f"  Supabase did not answer ({type(error).__name__}); trying again in {POLL_SECONDS} s")
+                time.sleep(POLL_SECONDS)
+                continue
             if song:
                 process(db, song)
             else:
