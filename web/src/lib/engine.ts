@@ -20,6 +20,10 @@ declare global {
   interface Window {
     SignalsmithStretch?: (context: AudioContext, options: AudioWorkletNodeOptions) => Promise<StretchNode>;
   }
+  interface Navigator {
+    /** WebKit's Audio Session API (iOS 17+); other browsers do not have it. */
+    audioSession?: { type: string };
+  }
 }
 
 const CHANNELS = 6;
@@ -71,7 +75,15 @@ export class StemEngine {
   private anchorTime = 0;
 
   private constructor() {
+    // On iOS, Web Audio is muted by the ring/silent switch unless the page asks
+    // for a "playback" session, the way a music app does.
+    if (navigator.audioSession) navigator.audioSession.type = "playback";
     this.ctx = new AudioContext();
+    // iOS stops the context ("interrupted") on a phone call or when the browser
+    // goes to the background. Hold the position, so play() carries on from there.
+    this.ctx.onstatechange = () => {
+      if (this.playing && this.ctx.state !== "running") this.stopAt(this.position());
+    };
   }
 
   /**
@@ -145,6 +157,7 @@ export class StemEngine {
 
   play(): void {
     if (this.playing) return;
+    // Must be called from the user's tap: browsers only let sound start that way.
     void this.ctx.resume();
     this.playing = true;
     this.startAt(this.anchorPos >= this.duration ? 0 : this.anchorPos, this.startDelay);

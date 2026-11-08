@@ -31,6 +31,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const hasVocals = names.includes("vocals");
 
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [failure, setFailure] = useState(""); // what went wrong, for bug reports
   const [fetched, setFetched] = useState(0); // stems downloaded so far
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -60,8 +61,11 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
       setDuration(created.duration);
       setState("ready");
     };
-    load().catch(() => {
-      if (!cancelled) setState("error");
+    load().catch((error: unknown) => {
+      if (cancelled) return;
+      console.error(error);
+      setFailure(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      setState("error");
     });
     return () => {
       cancelled = true;
@@ -88,9 +92,10 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
     const tick = () => {
       const current = engine.current;
       if (!current) return;
-      if (current.finishIfEnded()) {
+      // The song ended, or iOS interrupted the audio (a call, the browser in the background).
+      if (current.finishIfEnded() || !current.playing) {
         setPlaying(false);
-        setPosition(0);
+        setPosition(current.position());
         return;
       }
       setPosition(current.position());
@@ -173,9 +178,10 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
               </div>
             </div>
           ) : state === "error" ? (
-            <p role="alert" className="text-sm text-wine">
-              {t.loadError}
-            </p>
+            <div role="alert">
+              <p className="text-sm text-wine">{t.loadError}</p>
+              {failure && <p className="mt-1 text-xs break-words text-sand/70">{failure}</p>}
+            </div>
           ) : (
             <>
               <input
