@@ -14,7 +14,10 @@ export type SongStatus = "queued" | "processing" | "draft" | "published" | "fail
 
 export type Song = {
   id: string;
+  /** The page address. The database makes it from the title whenever the title changes. */
   slug: string;
+  /** Addresses the song had before its title changed; the song page redirects them. */
+  old_slugs: string[];
   youtube_id: string;
   youtube_url: string;
   title: string;

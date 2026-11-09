@@ -34,7 +34,6 @@ import re
 import shutil
 import sys
 import time
-import unicodedata
 from pathlib import Path
 
 import requests
@@ -114,16 +113,11 @@ class Supabase:
         self._check(response)
 
 
-# --- Titles and slugs --------------------------------------------------------
+# --- Titles --------------------------------------------------------
 
 YOUTUBE_ID = re.compile(r"(?:v=|youtu\.be/|/shorts/|/embed/|/live/)([A-Za-z0-9_-]{11})")
 # Bits of a video title that are not part of the song's name.
 TITLE_NOISE = re.compile(r"official|audio|video|lyrics|release|remaster|\bhd\b|\bhq\b|\b4k\b", re.I)
-GREEK = {
-    "α": "a", "β": "v", "γ": "g", "δ": "d", "ε": "e", "ζ": "z", "η": "i", "θ": "th",
-    "ι": "i", "κ": "k", "λ": "l", "μ": "m", "ν": "n", "ξ": "x", "ο": "o", "π": "p",
-    "ρ": "r", "σ": "s", "ς": "s", "τ": "t", "υ": "y", "φ": "f", "χ": "ch", "ψ": "ps", "ω": "o",
-}
 
 
 def youtube_id(url: str) -> str:
@@ -140,24 +134,6 @@ def split_title(video_title: str) -> tuple[str, str]:
     if len(parts) >= 2:
         return parts[0], parts[1]
     return "", (parts[0] if parts else video_title.strip())
-
-
-def slugify(text: str) -> str:
-    """Lower-case Latin slug; Greek is transliterated ("Άτακτη" -> "atakti")."""
-    text = unicodedata.normalize("NFD", text.lower())
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))  # drop accents
-    text = text.replace("ου", "ou").replace("αυ", "av").replace("ευ", "ev")
-    text = "".join(GREEK.get(ch, ch) for ch in text)
-    return re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-
-
-def free_slug(db: Supabase, wanted: str, song_id: str) -> str:
-    """`wanted`, or wanted-2, wanted-3... if another song already uses it."""
-    taken = {song["slug"] for song in db.songs(slug=f"like.{wanted}*", id=f"neq.{song_id}")}
-    slug, n = wanted, 2
-    while slug in taken:
-        slug, n = f"{wanted}-{n}", n + 1
-    return slug
 
 
 # --- Processing --------------------------------------------------------------
@@ -178,19 +154,17 @@ def upload_stems(db: Supabase, song_id: str, files: dict[str, Path], instrumenta
     return paths
 
 
-def describe(db: Supabase, song: dict, info: dict) -> dict:
-    """Title, artist, slug and duration for a song, from its YouTube video.
+def describe(song: dict, info: dict) -> dict:
+    """Title, artist and duration for a song, from its YouTube video.
 
-    A title the admin already typed is kept.
+    A title the admin already typed is kept. Setting the title also sets the
+    song's address: the database makes the slug from it (see the
+    song_slug_from_title migration).
     """
     artist, title = split_title(info["title"])
-    title = song.get("title") or title
-    artist = song.get("artist") or artist
-    wanted = slugify(title) or song["youtube_id"].lower()
     return {
-        "title": title,
-        "artist": artist,
-        "slug": free_slug(db, wanted, song["id"]),
+        "title": song.get("title") or title,
+        "artist": song.get("artist") or artist,
         "duration_seconds": info.get("duration"),
     }
 
@@ -209,9 +183,9 @@ def process(db: Supabase, song: dict) -> None:
 
     try:
         report("download", "reading the video's details...")
-        details = describe(db, song, guitar_split.video_info(song["youtube_url"]))
-        db.update_song(song_id, details)
-        print(f"  {details['artist'] or '?'} - {details['title']}  (/songs/{details['slug']})")
+        details = describe(song, guitar_split.video_info(song["youtube_url"]))
+        slug = db.update_song(song_id, details)[0]["slug"]
+        print(f"  {details['artist'] or '?'} - {details['title']}  (/songs/{slug})")
 
         files = guitar_split.split_song(song["youtube_url"], WORK / song_id, report=report)
         report("upload", "uploading the stems...")
@@ -289,12 +263,12 @@ def import_folder(
         "status": "processing",
         "step": "upload",
     })
-    details = describe(db, song, guitar_split.video_info(url))
+    details = describe(song, guitar_split.video_info(url))
     stems = upload_stems(db, song["id"], files, instrumental)
-    db.update_song(song["id"], {**details, "stems": stems, "status": "draft", "step": ""})
+    slug = db.update_song(song["id"], {**details, "stems": stems, "status": "draft", "step": ""})[0]["slug"]
     if publish:
         db.update_song(song["id"], {"status": "published"})
-    print(f"{'Published' if publish else 'Draft'}: {details['artist'] or '?'} - {details['title']}  (/songs/{details['slug']})")
+    print(f"{'Published' if publish else 'Draft'}: {details['artist'] or '?'} - {details['title']}  (/songs/{slug})")
 
 
 def add_admin(db: Supabase, username: str) -> None:

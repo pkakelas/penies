@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import type { Lang } from "@/lib/i18n";
-import { getPublishedSong } from "@/lib/songs";
+import { href, type Lang } from "@/lib/i18n";
+import { getMovedSongSlug, getPublishedSong } from "@/lib/songs";
 import { DraftPreview } from "./DraftPreview";
 import { Footer, Header } from "./Header";
 import { SongView } from "./SongView";
@@ -27,6 +28,11 @@ export function SongRoute({ lang, params }: { lang: Lang; params: SongParams }) 
 async function SongLoader({ lang, params }: { lang: Lang; params: SongParams }) {
   const { slug } = await params;
   const song = await getPublishedSong(slug);
+  if (!song) {
+    // The address follows the title, so a renamed song has moved: send old links on.
+    const moved = await getMovedSongSlug(slug);
+    if (moved) redirect(href(lang, `/songs/${moved}`));
+  }
   return (
     <>
       <Header lang={lang} page={`/songs/${slug}`} />
