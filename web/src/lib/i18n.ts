@@ -44,6 +44,9 @@ const el = {
     description: "Backing tracks για μπουζούκι.",
   },
   nav: { songs: "Τραγούδια" },
+  // In the footer; the heart is drawn between the two halves.
+  credit: ["Φτιαγμένο με", "από τον Δημήτρη Λαμπρινό"],
+  contact: "Γράψε μου στο",
   hero: {
     title: "Backing tracks για",
     titleEm: "μπουζούκι",
@@ -170,6 +173,8 @@ const en: Dict = {
     description: "Backing tracks for bouzouki.",
   },
   nav: { songs: "Songs" },
+  credit: ["Created by Dimitris Lamprinos with", ""],
+  contact: "Reach out at",
   hero: {
     title: "Backing tracks for",
     titleEm: "bouzouki",

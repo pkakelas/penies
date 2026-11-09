@@ -1,5 +1,8 @@
 import { dictionaries, href, SITE_NAME, type Lang } from "@/lib/i18n";
 
+/** Where visitors can write to. */
+const CONTACT = "pkakelas@gmail.com";
+
 /** A bouzouki pick. */
 export function PickMark({ className = "" }: { className?: string }) {
   return (
@@ -45,11 +48,25 @@ export function Header({ lang, page }: { lang: Lang; page: string }) {
 }
 
 export function Footer({ lang }: { lang: Lang }) {
+  const t = dictionaries[lang];
   return (
     <footer className="mt-auto border-t border-line">
-      <div className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-10 sm:px-10">
-        <PickMark className="h-4 w-4 text-brass" />
-        <span className="font-display text-lg">{SITE_NAME[lang]}</span>
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-8 gap-y-3 px-6 py-10 sm:px-10">
+        <div className="flex items-center gap-2">
+          <PickMark className="h-4 w-4 text-brass" />
+          <span className="font-display text-lg">{SITE_NAME[lang]}</span>
+        </div>
+        <div className="flex flex-col gap-1 text-sm text-sand sm:items-end">
+          <p>
+            {t.credit[0]} <span className="text-wine">♥</span> {t.credit[1]}
+          </p>
+          <p>
+            {t.contact}{" "}
+            <a href={`mailto:${CONTACT}`} className="text-cream underline decoration-line underline-offset-4 transition-colors hover:text-brass-bright hover:decoration-brass">
+              {CONTACT}
+            </a>
+          </p>
+        </div>
       </div>
     </footer>
   );
