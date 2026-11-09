@@ -62,7 +62,7 @@ export function Footer({ lang }: { lang: Lang }) {
         </div>
         <div className="flex flex-col gap-1 text-sm text-sand sm:items-end">
           <p>
-            {t.credit[0]} <span className="text-wine">♥</span> {t.credit[1]}
+            {t.credit} <span className="text-wine">♥</span>
           </p>
           <p>
             {t.contact}{" "}
