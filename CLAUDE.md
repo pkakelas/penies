@@ -1,6 +1,6 @@
-# bouzouki / Πενιά (Penia)
+# bouzouki / Πενιές (Penies)
 
-Penia is a site for practising bouzouki over real recordings. A song from YouTube is split into stems with MVSEP; the site plays the backing with the lead bouzouki and the vocals on switches, at 50–150% speed without changing pitch. The site is in Greek (default, at `/`) and English (`/en`).
+Penies is a site for practising bouzouki over real recordings. A song from YouTube is split into stems with MVSEP; the site plays the backing with the lead bouzouki and the vocals on switches, at 50–150% speed without changing pitch. The site is in Greek (default, at `/`) and English (`/en`).
 
 How a song gets onto the site:
 
