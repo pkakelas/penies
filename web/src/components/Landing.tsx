@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { dictionaries, type Lang } from "@/lib/i18n";
 import { Footer, Header } from "./Header";
 import { SongList, SongListSkeleton } from "./SongList";
+import { SongRequest } from "./SongRequest";
 import { Strings } from "./Strings";
 
 /** The home page: one line saying what Penia is, then the songs. */
@@ -29,7 +30,10 @@ export function Landing({ lang }: { lang: Lang }) {
 
         <section id="songs" className="scroll-mt-10 border-t border-line bg-coal">
           <div className="mx-auto max-w-6xl px-6 py-24 sm:px-10 sm:py-32">
-            <h2 className="font-display text-5xl tracking-tight sm:text-6xl">{t.songs.title}</h2>
+            <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
+              <h2 className="font-display text-5xl tracking-tight sm:text-6xl">{t.songs.title}</h2>
+              <SongRequest lang={lang} t={t.request} />
+            </div>
             <Suspense fallback={<SongListSkeleton />}>
               <SongList lang={lang} />
             </Suspense>

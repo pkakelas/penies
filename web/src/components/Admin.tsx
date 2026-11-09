@@ -4,7 +4,15 @@ import type { Session } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { refreshSongs } from "@/app/actions";
 import { dictionaries, formatTime, formatTimeExact, href, parseTime, type Dict, type Lang } from "@/lib/i18n";
-import { ADMIN_EMAIL_DOMAIN, orderSongs, playableLength, STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
+import {
+  ADMIN_EMAIL_DOMAIN,
+  orderSongs,
+  playableLength,
+  STEMS_BUCKET,
+  supabaseBrowser,
+  type Song,
+  type SongRequest,
+} from "@/lib/supabase";
 
 const POLL_MS = 4000;
 
@@ -128,14 +136,17 @@ function SignIn({ t }: { t: Dict["admin"] }) {
 function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
   const t = dictionaries[lang].admin;
   const [songs, setSongs] = useState<Song[] | null>(null);
+  // What visitors asked for on the landing page, the one waiting longest first.
+  const [requests, setRequests] = useState<SongRequest[]>([]);
   const [problem, setProblem] = useState("");
 
   const load = useCallback(async () => {
-    const { data, error } = await supabaseBrowser()
-      .from("songs")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (!error) setSongs(data as Song[]);
+    const [songRows, requestRows] = await Promise.all([
+      supabaseBrowser().from("songs").select("*").order("created_at", { ascending: false }),
+      supabaseBrowser().from("song_requests").select("*").order("created_at", { ascending: true }),
+    ]);
+    if (!songRows.error) setSongs(songRows.data as Song[]);
+    if (!requestRows.error) setRequests(requestRows.data as SongRequest[]);
   }, []);
 
   // Read the list now, and keep reading it while the worker has something to do.
@@ -171,6 +182,11 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
       }
       return db().delete().eq("id", song.id);
     });
+  };
+
+  const finishRequest = (request: SongRequest) => {
+    if (!window.confirm(t.confirmRequestDone)) return;
+    void change(() => supabaseBrowser().from("song_requests").delete().eq("id", request.id));
   };
 
   const inProgress = songs?.filter((song) => ["queued", "processing", "failed"].includes(song.status)) ?? [];
@@ -209,6 +225,29 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
         <p className="mt-12 text-sand">…</p>
       ) : (
         <>
+          {requests.length > 0 && (
+            <Section title={t.requests} count={requests.length}>
+              {requests.map((request) => (
+                <li key={request.id} className="flex items-start justify-between gap-4 rounded-2xl border border-line bg-coal p-5">
+                  <div className="min-w-0">
+                    <p className="font-medium break-words">{request.song}</p>
+                    <p className="mt-1.5 flex flex-wrap gap-x-3 text-sm text-sand">
+                      <a href={`mailto:${request.email}`} className="break-all text-cream underline decoration-line underline-offset-4 hover:decoration-brass">
+                        {request.email}
+                      </a>
+                      <time dateTime={request.created_at} className="tabular-nums">
+                        {new Date(request.created_at).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" })}
+                      </time>
+                    </p>
+                  </div>
+                  <button type="button" className={`${quiet} shrink-0`} onClick={() => finishRequest(request)}>
+                    {t.requestDone}
+                  </button>
+                </li>
+              ))}
+            </Section>
+          )}
+
           {inProgress.length > 0 && (
             <Section title={t.processing} count={inProgress.length}>
               {inProgress.map((song) => (

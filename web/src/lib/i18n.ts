@@ -55,6 +55,20 @@ const el = {
     empty: "Τα πρώτα τραγούδια ανεβαίνουν σύντομα.",
     open: "Άνοιγμα",
   },
+  request: {
+    button: "Ζήτα ένα τραγούδι",
+    title: "Ζήτα ένα τραγούδι",
+    promise: "Θα το έχουμε εδώ μέσα σε 24 ώρες και θα σου γράψουμε μόλις ανέβει.",
+    note: "Για να χωριστούν καθαρά τα όργανα χρειαζόμαστε ηχογράφηση καλής ποιότητας, γι' αυτό μπορεί να μην είναι η πρώτη εκτέλεση.",
+    song: "Τραγούδι",
+    songPlaceholder: "Τίτλος και καλλιτέχνης",
+    email: "Email",
+    send: "Αποστολή",
+    sending: "Αποστολή…",
+    sent: "Το λάβαμε. Θα σου γράψουμε μόλις ανέβει.",
+    failed: "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
+    close: "Κλείσιμο",
+  },
   song: {
     firstPerformed: "Πρώτη εκτέλεση",
     firstSinger: "Πρώτη ερμηνεία",
@@ -136,6 +150,9 @@ const el = {
     remove: "Διαγραφή",
     confirmRemove: "Να διαγραφεί οριστικά το τραγούδι και τα αρχεία του;",
     untitled: "Χωρίς τίτλο",
+    requests: "Αιτήματα",
+    requestDone: "Έγινε",
+    confirmRequestDone: "Να διαγραφεί το αίτημα;",
   },
 };
 
@@ -157,6 +174,20 @@ const en: Dict = {
     title: "Songs",
     empty: "The first songs are on their way.",
     open: "Open",
+  },
+  request: {
+    button: "Request a song",
+    title: "Request a song",
+    promise: "We'll have it here within 24 hours and email you when it's up.",
+    note: "Splitting the instruments cleanly needs a good-quality recording, so it may not be the original version.",
+    song: "Song",
+    songPlaceholder: "Title and artist",
+    email: "Email",
+    send: "Send",
+    sending: "Sending…",
+    sent: "Got it. We'll email you when it's up.",
+    failed: "Something went wrong. Try again.",
+    close: "Close",
   },
   song: {
     firstPerformed: "First performed",
@@ -239,6 +270,9 @@ const en: Dict = {
     remove: "Delete",
     confirmRemove: "Delete this song and its files for good?",
     untitled: "Untitled",
+    requests: "Requests",
+    requestDone: "Done",
+    confirmRequestDone: "Delete this request?",
   },
 };
 

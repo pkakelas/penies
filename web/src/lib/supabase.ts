@@ -48,6 +48,16 @@ export type Song = {
   published_at: string | null;
 };
 
+/** A song a visitor asked for with the form on the landing page. */
+export type SongRequest = {
+  id: string;
+  song: string;
+  email: string;
+  /** The language of the page it was sent from. */
+  lang: "el" | "en";
+  created_at: string;
+};
+
 /** The order of the landing page's list: placed songs by their number, unplaced ones first, newest first. */
 export function orderSongs<T extends Pick<Song, "sort_order" | "published_at">>(songs: T[]): T[] {
   return [...songs].sort((a, b) => {
