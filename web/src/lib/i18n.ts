@@ -2,7 +2,7 @@
 
 export type Lang = "el" | "en";
 
-export const SITE_NAME = { el: "Πενιά", en: "Penia" } as const;
+export const SITE_NAME = { el: "Πενιές", en: "Penies" } as const;
 
 /** Path of a page in the given language: Greek has no prefix, English lives under /en. */
 export function href(lang: Lang, path: string): string {
@@ -40,8 +40,8 @@ export function parseTime(text: string): number | null {
 
 const el = {
   meta: {
-    title: "Πενιά — backing tracks για μπουζούκι",
-    description: "Backing tracks για μπουζούκι.",
+    title: "Πενιές — backing tracks για μπουζούκι και φωνή",
+    description: "Backing tracks για μπουζούκι και φωνή.",
   },
   nav: { songs: "Τραγούδια" },
   // In the footer; the heart is drawn between the two halves.
@@ -49,7 +49,7 @@ const el = {
   contact: "Γράψε μου στο",
   hero: {
     title: "Backing tracks για",
-    titleEm: "μπουζούκι",
+    titleEm: "μπουζούκι και φωνή",
   },
   songs: {
     title: "Τραγούδια",
@@ -168,15 +168,15 @@ export type Dict = typeof el;
 
 const en: Dict = {
   meta: {
-    title: "Penia — backing tracks for bouzouki",
-    description: "Backing tracks for bouzouki.",
+    title: "Penies — backing tracks for bouzouki and voice",
+    description: "Backing tracks for bouzouki and voice.",
   },
   nav: { songs: "Songs" },
   credit: ["Created by Dimitris Lamprinos with", ""],
   contact: "Reach out at",
   hero: {
     title: "Backing tracks for",
-    titleEm: "bouzouki",
+    titleEm: "bouzouki and voice",
   },
   songs: {
     title: "Songs",

@@ -5,7 +5,7 @@ import { SongList, SongListSkeleton } from "./SongList";
 import { SongRequest } from "./SongRequest";
 import { Strings } from "./Strings";
 
-/** The home page: one line saying what Penia is, then the songs. */
+/** The home page: one line saying what Penies is, then the songs. */
 export function Landing({ lang }: { lang: Lang }) {
   const t = dictionaries[lang];
   return (

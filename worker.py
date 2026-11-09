@@ -3,7 +3,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["yt-dlp", "requests"]
 # ///
-"""Penia worker: turns songs added on the site into playable drafts.
+"""Penies worker: turns songs added on the site into playable drafts.
 
 An admin adds a YouTube link on /admin, which creates a "queued" row in the
 songs table. This worker picks the row up, splits the song with MVSEP
@@ -217,7 +217,7 @@ def next_song(db: Supabase, resume: bool) -> dict | None:
 
 
 def run(db: Supabase, once: bool) -> None:
-    print("Penia worker: watching for songs added on /admin. Ctrl-C to stop.")
+    print("Penies worker: watching for songs added on /admin. Ctrl-C to stop.")
     resume = True
     try:
         while True:
@@ -302,7 +302,7 @@ def add_admin(db: Supabase, username: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Penia worker: process songs added on the site.")
+    parser = argparse.ArgumentParser(description="Penies worker: process songs added on the site.")
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("run", help="keep watching for new songs (the default)")
     commands.add_parser("once", help="process the songs that are waiting, then stop")
