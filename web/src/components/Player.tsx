@@ -58,6 +58,12 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
       const created = await StemEngine.create(files as StemFiles, { vocals: true, lead: false }, playableRange(song));
       if (cancelled) return created.destroy();
       engine.current = created;
+      // The engine also starts and stops by itself: the end of the song, an
+      // interruption, the pause button of Android's media notification.
+      created.onchange = () => {
+        setPlaying(created.playing);
+        setPosition(created.position());
+      };
       setDuration(created.duration);
       setState("ready");
     };

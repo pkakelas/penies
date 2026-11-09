@@ -58,12 +58,44 @@ export type StemFiles = {
 /** The part of the recording to play, in seconds. Missing or null means the recording's own start or end. */
 export type PlayRange = { start?: number | null; end?: number | null };
 
+/** Silence as a WAV file (8-bit mono, 8 kHz: 8 kB per second). */
+function silentWav(seconds: number): Blob {
+  const rate = 8000;
+  const bytes = new Uint8Array(44 + rate * seconds).fill(0x80, 44); // 0x80 is zero in 8-bit PCM
+  const view = new DataView(bytes.buffer);
+  const text = (at: number, value: string) => {
+    for (let i = 0; i < value.length; i++) bytes[at + i] = value.charCodeAt(i);
+  };
+  text(0, "RIFF");
+  view.setUint32(4, bytes.length - 8, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); // size of the format block
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // one channel
+  view.setUint32(24, rate, true); // samples per second
+  view.setUint32(28, rate, true); // bytes per second
+  view.setUint16(32, 1, true); // bytes per sample
+  view.setUint16(34, 8, true); // bits per sample
+  text(36, "data");
+  view.setUint32(40, rate * seconds, true);
+  return new Blob([bytes], { type: "audio/wav" });
+}
+
 export class StemEngine {
   /** Length of what is played, in seconds (after trimming to the range). */
   duration = 0;
   playing = false;
+  /** Called when `playing` changes, also when the engine itself starts or stops (see `silence`). */
+  onchange?: () => void;
 
   private ctx: AudioContext;
+  // Android only. To Chrome on Android, Web Audio alone is not "playing media":
+  // once the browser is in the background the system slows it down, the
+  // stretcher no longer keeps up and the sound breaks up. An <audio> element
+  // does count (it gets the media notification), so a silent one plays in a
+  // loop for as long as the song does. The notification's pause button, a phone
+  // call or unplugged headphones pause that element, and the song follows it.
+  private silence?: HTMLAudioElement;
   private stretch!: StretchNode;
   private vocalGain!: GainNode;
   private leadGain!: GainNode;
@@ -84,6 +116,22 @@ export class StemEngine {
     this.ctx.onstatechange = () => {
       if (this.playing && this.ctx.state !== "running") this.stopAt(this.position());
     };
+    if (/Android/i.test(navigator.userAgent)) {
+      // Longer than 5 seconds: Chrome shows no notification for shorter sounds.
+      const silence = new Audio(URL.createObjectURL(silentWav(10)));
+      silence.loop = true;
+      // The events arrive a moment late, so look at the element itself: after a
+      // quick play and pause, the "play" event must not start the song again.
+      silence.onpause = () => {
+        if (silence.paused) this.pause();
+      };
+      silence.onplay = () => {
+        if (!silence.paused) this.play();
+      };
+      // In the background the page draws no frames, so the player's own check for the end does not run.
+      silence.ontimeupdate = () => this.finishIfEnded();
+      this.silence = silence;
+    }
   }
 
   /**
@@ -159,8 +207,11 @@ export class StemEngine {
     if (this.playing) return;
     // Must be called from the user's tap: browsers only let sound start that way.
     void this.ctx.resume();
+    // Refused or cut short by a quick pause: the song plays all the same.
+    this.silence?.play().catch(() => {});
     this.playing = true;
     this.startAt(this.anchorPos >= this.duration ? 0 : this.anchorPos, this.startDelay);
+    this.onchange?.();
   }
 
   pause(): void {
@@ -197,6 +248,12 @@ export class StemEngine {
 
   destroy(): void {
     this.playing = false;
+    this.onchange = undefined;
+    if (this.silence) {
+      this.silence.pause();
+      URL.revokeObjectURL(this.silence.src);
+      this.silence.removeAttribute("src");
+    }
     if (this.ctx.state !== "closed") void this.ctx.close();
   }
 
@@ -210,6 +267,8 @@ export class StemEngine {
     this.anchorPos = pos;
     this.playing = false;
     void this.stretch.schedule({ active: false, output: this.ctx.currentTime });
+    this.silence?.pause();
+    this.onchange?.();
   }
 
   // A short fade instead of a hard switch, to avoid a click.
