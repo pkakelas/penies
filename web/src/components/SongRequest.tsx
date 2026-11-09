@@ -138,7 +138,7 @@ export function SongRequest({
         aria-labelledby={titleId}
         onClick={closeFromOutside}
         onClose={reset}
-        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border border-line bg-coal text-cream shadow-2xl shadow-black/70 backdrop:bg-ink/80 backdrop:backdrop-blur-sm"
+        className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-3xl border border-line bg-coal text-cream shadow-2xl shadow-black/70 backdrop:bg-ink/80 backdrop:backdrop-blur-sm"
       >
         <div className="relative p-7 sm:p-9">
           <button
