@@ -13,6 +13,7 @@ type StretchNode = AudioWorkletNode & {
   schedule(change: { active?: boolean; input?: number; output?: number; rate?: number }): Promise<unknown>;
   addBuffers(channels: Float32Array[], transfer?: ArrayBuffer[]): Promise<number>;
   dropBuffers(): Promise<unknown>;
+  configure(config: { preset?: "default" | "cheaper" }): Promise<unknown>;
   latency(): Promise<number>;
 };
 
@@ -96,6 +97,7 @@ export class StemEngine {
   // loop for as long as the song does. The notification's pause button, a phone
   // call or unplugged headphones pause that element, and the song follows it.
   private silence?: HTMLAudioElement;
+  private android = /Android/i.test(navigator.userAgent);
   private stretch!: StretchNode;
   private vocalGain!: GainNode;
   private leadGain!: GainNode;
@@ -110,13 +112,16 @@ export class StemEngine {
     // On iOS, Web Audio is muted by the ring/silent switch unless the page asks
     // for a "playback" session, the way a music app does.
     if (navigator.audioSession) navigator.audioSession.type = "playback";
-    this.ctx = new AudioContext();
+    // In the background Android also lets the audio thread wait longer for its
+    // turn. A larger output buffer (0.1 s; Chrome's own choice there is about
+    // 0.04 s) rides over those waits, and makes pause and the switches that much later.
+    this.ctx = new AudioContext(this.android ? { latencyHint: 0.1 } : undefined);
     // iOS stops the context ("interrupted") on a phone call or when the browser
     // goes to the background. Hold the position, so play() carries on from there.
     this.ctx.onstatechange = () => {
       if (this.playing && this.ctx.state !== "running") this.stopAt(this.position());
     };
-    if (/Android/i.test(navigator.userAgent)) {
+    if (this.android) {
       // Longer than 5 seconds: Chrome shows no notification for shorter sounds.
       const silence = new Audio(URL.createObjectURL(silentWav(10)));
       silence.loop = true;
@@ -131,6 +136,12 @@ export class StemEngine {
       // In the background the page draws no frames, so the player's own check for the end does not run.
       silence.ontimeupdate = () => this.finishIfEnded();
       this.silence = silence;
+      // The notification's bar is dragged: go there (see report()).
+      navigator.mediaSession?.setActionHandler("seekto", (details) => {
+        if (details.seekTime == null) return;
+        this.seek(details.seekTime);
+        this.onchange?.();
+      });
     }
   }
 
@@ -152,6 +163,9 @@ export class StemEngine {
         numberOfOutputs: 1,
         outputChannelCount: [CHANNELS],
       });
+      // Less work for a phone, which Android gives little processor time in the
+      // background: shorter blocks, fewer of them, the work spread evenly.
+      if (engine.android) await node.configure({ preset: "cheaper" });
       engine.startDelay = await node.latency();
 
       const split = ctx.createChannelSplitter(CHANNELS);
@@ -221,7 +235,10 @@ export class StemEngine {
   seek(seconds: number): void {
     const pos = Math.min(this.duration, Math.max(0, seconds));
     if (this.playing) this.startAt(pos);
-    else this.anchorPos = pos;
+    else {
+      this.anchorPos = pos;
+      this.report();
+    }
   }
 
   /** 1 = normal speed. */
@@ -229,6 +246,7 @@ export class StemEngine {
     const pos = this.position(); // read before the speed changes
     this.rate = rate;
     if (this.playing) this.startAt(pos);
+    else this.report();
   }
 
   setVocals(on: boolean): void {
@@ -253,6 +271,9 @@ export class StemEngine {
       this.silence.pause();
       URL.revokeObjectURL(this.silence.src);
       this.silence.removeAttribute("src");
+      navigator.mediaSession?.setActionHandler("seekto", null);
+      navigator.mediaSession?.setPositionState?.();
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = "none";
     }
     if (this.ctx.state !== "closed") void this.ctx.close();
   }
@@ -261,6 +282,7 @@ export class StemEngine {
     this.anchorPos = pos;
     this.anchorTime = this.ctx.currentTime + delay;
     void this.stretch.schedule({ active: true, input: pos, output: this.anchorTime, rate: this.rate });
+    this.report();
   }
 
   private stopAt(pos: number): void {
@@ -268,7 +290,22 @@ export class StemEngine {
     this.playing = false;
     void this.stretch.schedule({ active: false, output: this.ctx.currentTime });
     this.silence?.pause();
+    this.report();
     this.onchange?.();
+  }
+
+  // Tell Android's media notification how long the song is, where it is and
+  // how fast it moves. Left alone, it shows the silent element's ten seconds.
+  private report(): void {
+    const session = navigator.mediaSession;
+    if (!this.silence || !session?.setPositionState || !this.duration) return;
+    // The notification counts on by itself, and stands still only when told the song is paused.
+    session.playbackState = this.playing ? "playing" : "paused";
+    session.setPositionState({
+      duration: this.duration,
+      playbackRate: this.rate,
+      position: Math.min(this.duration, Math.max(0, this.anchorPos)),
+    });
   }
 
   // A short fade instead of a hard switch, to avoid a click.

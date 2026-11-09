@@ -80,6 +80,15 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
     };
   }, [song]);
 
+  // What a phone's media notification says is playing.
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({ title: song.title, artist: song.artist });
+    return () => {
+      navigator.mediaSession.metadata = null;
+    };
+  }, [song]);
+
   // Keep the engine in step with the controls.
   useEffect(() => {
     if (state === "ready") engine.current?.setLead(lead);
