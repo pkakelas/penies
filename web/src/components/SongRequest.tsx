@@ -152,6 +152,7 @@ export function SongRequest({
           <h2 id={titleId} className="pr-8 font-display text-3xl tracking-tight sm:text-4xl">
             {paid ? t.paidTitle : t.title}
           </h2>
+          {!paid && <p className="mt-2 text-sm text-brass-bright">{t.terms}</p>}
           {paid ? (
             <>
               <p role="status" className="mt-5 leading-relaxed text-cream">

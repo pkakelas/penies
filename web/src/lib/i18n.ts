@@ -64,7 +64,7 @@ const el = {
   },
   request: {
     button: "Ζήτα τραγούδια",
-    title: "3 τραγούδια, 5 €",
+    title: "Η παραγγελιά σου",
     promise: "Θα τα έχουμε εδώ μέσα σε 24 ώρες και θα σου στείλουμε email μόλις ανέβουν.",
     note: "Για να χωριστούν καθαρά τα όργανα χρειαζόμαστε ηχογράφηση καλής ποιότητας, γι' αυτό μπορεί να μην είναι η πρώτη εκτέλεση.",
     offer: "Δεχόμαστε και παραγγελιές.",
@@ -195,7 +195,7 @@ const en: Dict = {
   },
   request: {
     button: "Request songs",
-    title: "3 songs, €5",
+    title: "Your request",
     promise: "We'll have them here within 24 hours and email you when they're up.",
     note: "Splitting the instruments cleanly needs a good-quality recording, so it may not be the original version.",
     offer: "We take requests too.",
