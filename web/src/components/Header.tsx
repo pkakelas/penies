@@ -1,4 +1,5 @@
 import { dictionaries, href, SITE_NAME, type Lang } from "@/lib/i18n";
+import { SongRequest } from "./SongRequest";
 
 /** Where visitors can write to. */
 const CONTACT = "pkakelas@gmail.com";
@@ -18,7 +19,8 @@ export function PickMark({ className = "" }: { className?: string }) {
 /**
  * Top bar. `page` is the current page's path without the language prefix
  * ("/", "/songs/atakti", "/admin"); the language switch links to the same
- * page in the other language.
+ * page in the other language. Every page but /admin has the button for
+ * asking for songs.
  */
 export function Header({ lang, page }: { lang: Lang; page: string }) {
   const t = dictionaries[lang];
@@ -31,9 +33,11 @@ export function Header({ lang, page }: { lang: Lang; page: string }) {
           <span className="font-display text-2xl tracking-tight">{SITE_NAME[lang]}</span>
         </a>
         <nav className="flex items-center gap-6 text-sm text-sand sm:gap-8">
-          <a href={`${href(lang, "/")}#songs`} className="transition-colors hover:text-cream">
+          {/* On a phone there is room for this link or for the request button, not both. */}
+          <a href={`${href(lang, "/")}#songs`} className={`transition-colors hover:text-cream ${page === "/admin" ? "" : "max-sm:hidden"}`}>
             {t.nav.songs}
           </a>
+          {page !== "/admin" && <SongRequest lang={lang} t={t.request} header />}
           <a
             href={href(other, page)}
             hrefLang={other}
