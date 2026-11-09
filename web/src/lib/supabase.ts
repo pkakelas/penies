@@ -30,6 +30,8 @@ export type Song = {
   instrumental: boolean;
   /** Who wrote the music. */
   composer: string;
+  /** The visitor who asked for the song, as named in the request form. Empty: nobody asked. */
+  requested_by: string;
   status: SongStatus;
   step: string;
   step_detail: string;
@@ -55,6 +57,8 @@ export type Song = {
 export type SongRequest = {
   id: string;
   song: string;
+  /** Who is asking, as typed. Null in requests from before the form asked for a name. */
+  name: string | null;
   email: string;
   /** The language of the page it was sent from. */
   lang: "el" | "en";

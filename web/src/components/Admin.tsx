@@ -232,6 +232,7 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
                   <div className="min-w-0">
                     <p className="font-medium break-words">{request.song}</p>
                     <p className="mt-1.5 flex flex-wrap gap-x-3 text-sm text-sand">
+                      {request.name && <span className="text-cream">{request.name}</span>}
                       <a href={`mailto:${request.email}`} className="break-all text-cream underline decoration-line underline-offset-4 hover:decoration-brass">
                         {request.email}
                       </a>
@@ -426,6 +427,7 @@ function SongCard(props: {
   const [firstSinger, setFirstSinger] = useState(song.first_singer);
   const [instrumental, setInstrumental] = useState(song.instrumental);
   const [composer, setComposer] = useState(song.composer);
+  const [requestedBy, setRequestedBy] = useState(song.requested_by);
   // Where the song starts and ends, as typed (m:ss); blank means the recording's own start or end.
   const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
   const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
@@ -447,6 +449,7 @@ function SongCard(props: {
     first_singer: firstSinger.trim(),
     instrumental,
     composer: composer.trim(),
+    requested_by: requestedBy.trim(),
     start_seconds: badTrim ? song.start_seconds : start,
     end_seconds: badTrim ? song.end_seconds : end,
   };
@@ -457,6 +460,7 @@ function SongCard(props: {
     details.first_singer !== song.first_singer ||
     details.instrumental !== song.instrumental ||
     details.composer !== song.composer ||
+    details.requested_by !== song.requested_by ||
     details.start_seconds !== song.start_seconds ||
     details.end_seconds !== song.end_seconds;
   const length = badTrim ? null : playableLength({ ...song, start_seconds: start, end_seconds: end });
@@ -515,6 +519,15 @@ function SongCard(props: {
         <label className="block text-xs text-sand">
           {labels.composer}
           <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
+        </label>
+        <label className="block text-xs text-sand">
+          {labels.requestedBy}
+          <input
+            value={requestedBy}
+            onChange={(event) => setRequestedBy(event.target.value)}
+            maxLength={100}
+            className={`${field} mt-1.5 text-base`}
+          />
         </label>
         <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
           <input

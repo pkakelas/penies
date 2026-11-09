@@ -72,6 +72,7 @@ const el = {
     terms: "Τρία τραγούδια, 5\u00a0€",
     song: "Τραγούδι",
     examples: ["Αχάριστη, Τσιτσάνης", "Ευδοκία, Λοΐζος", "Ο πασατέμπος, Χιώτης"],
+    name: "Όνομα",
     email: "Email",
     pay: "Πληρωμή 5 €",
     paying: "Προς την πληρωμή…",
@@ -87,6 +88,7 @@ const el = {
     singer: "Σε αυτή την εκτέλεση",
     instrumental: "Ορχηστρικό",
     composer: "Μουσική",
+    requestedBy: "Ζητήθηκε από",
   },
   player: {
     back: "Όλα τα τραγούδια",
@@ -203,6 +205,7 @@ const en: Dict = {
     terms: "Three songs, €5",
     song: "Song",
     examples: ["Acharisti, Tsitsanis", "Evdokia, Loizos", "O pasatempos, Chiotis"],
+    name: "Name",
     email: "Email",
     pay: "Pay €5",
     paying: "Taking you to payment…",
@@ -218,6 +221,7 @@ const en: Dict = {
     singer: "In this recording",
     instrumental: "Instrumental",
     composer: "Music",
+    requestedBy: "Requested by",
   },
   player: {
     back: "All songs",

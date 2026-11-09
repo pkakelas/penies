@@ -22,7 +22,7 @@ const PAYING = "penia-paying";
 
 /**
  * A button that opens a form for asking for three songs, which are paid for
- * together. The requests are saved (they show up in /admin) and the visitor
+ * together, with the visitor's name and email. The requests are saved (they show up in /admin) and the visitor
  * goes to the payment page; back from it, the form says the payment was made.
  * `song` is what the first song field starts with. `header` is the smaller
  * button of the top bar, which is on every page: that one opens by itself
@@ -88,6 +88,7 @@ export function SongRequest({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = String(form.get("name"));
     const email = String(form.get("email"));
     const songs = form.getAll("song").map(String);
     if (!PAYMENT_LINK) {
@@ -95,11 +96,11 @@ export function SongRequest({
       return;
     }
     setState("sending");
-    const key = JSON.stringify([songs, email, lang]);
+    const key = JSON.stringify([songs, name, email, lang]);
     if (saved.current.key !== key) {
       // One id for the songs of this form. Stripe hands it back with the payment, which is how the database knows which requests were paid for.
       const id = crypto.randomUUID();
-      const rows = songs.map((song) => ({ song, email, lang, form: id }));
+      const rows = songs.map((song) => ({ song, name, email, lang, form: id }));
       const { error } = await supabaseBrowser().from("song_requests").insert(rows);
       if (error) {
         setState("failed");
@@ -200,18 +201,30 @@ export function SongRequest({
                   </li>
                 ))}
               </ol>
-              {/* The email stands apart, so it does not read as a fourth song. */}
-              <label className="mt-4 flex cursor-text items-baseline gap-3.5 rounded-2xl border border-line bg-ink pr-4 pl-5 transition-colors has-[:focus]:border-brass">
-                <span className="shrink-0 text-sm text-sand">{t.email}</span>
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  maxLength={254}
-                  autoComplete="email"
-                  className="min-w-0 flex-1 bg-transparent py-3.5 text-base text-cream focus:outline-none!"
-                />
-              </label>
+              {/* Who is asking stands apart, so it does not read as more songs. */}
+              <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-ink">
+                <label className={contact}>
+                  <span className="w-14 shrink-0 text-sm text-sand">{t.name}</span>
+                  <input
+                    name="name"
+                    required
+                    maxLength={100}
+                    autoComplete="name"
+                    className="min-w-0 flex-1 bg-transparent py-3.5 text-base text-cream focus:outline-none!"
+                  />
+                </label>
+                <label className={`${contact} border-t border-line`}>
+                  <span className="w-14 shrink-0 text-sm text-sand">{t.email}</span>
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    maxLength={254}
+                    autoComplete="email"
+                    className="min-w-0 flex-1 bg-transparent py-3.5 text-base text-cream focus:outline-none!"
+                  />
+                </label>
+              </div>
               {state === "failed" && (
                 <p role="alert" className="mt-5 text-sm text-wine">
                   {t.failed}
@@ -231,6 +244,10 @@ export function SongRequest({
     </>
   );
 }
+
+/** A row of the name-and-email card: lit like a song's row while it is typed in. */
+const contact =
+  "flex cursor-text items-baseline gap-3.5 pr-4 pl-5 transition-colors has-[:focus]:bg-ember has-[:focus]:shadow-[inset_2px_0_0_var(--color-brass)]";
 
 /** Whether the address says the visitor is back from the payment page. `forget` takes that out of the address. */
 const watching = new Set<() => void>();

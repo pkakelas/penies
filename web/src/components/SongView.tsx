@@ -11,6 +11,7 @@ export function SongView({ lang, song, draft = false }: { lang: Lang; song: Song
     { label: t.song.firstPerformed, value: song.first_performed },
     { label: song.instrumental ? t.song.firstPlayer : t.song.firstSinger, value: song.first_singer },
     { label: t.song.singer, value: song.artist },
+    { label: t.song.requestedBy, value: song.requested_by },
   ].filter((detail) => detail.value);
   return (
     <main className="mx-auto w-full max-w-3xl px-6 pt-32 pb-24 sm:px-10 sm:pt-40">

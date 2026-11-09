@@ -51,6 +51,7 @@ export async function SongList({ lang }: { lang: Lang }) {
         song.first_singer,
         song.artist,
         song.first_performed,
+        song.requested_by,
         song.instrumental ? t.song.instrumental : "",
       ].join(" "),
     ),
@@ -213,16 +214,18 @@ function Record({ defs, children }: { defs?: ReactNode; children: ReactNode }) {
   );
 }
 
-/** Liner notes: the composer and year on one line, then who sang it first and who sings here. */
+/** Liner notes: the composer and year on one line, then who sang it first, who sings here and who asked for it. */
 function Credits({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang];
   const head = [song.composer, song.first_performed].filter(Boolean).join(" · ");
   return (
     <div className={NOTES}>
       {head && <p className="text-sm text-cream/85 sm:text-base">{head}</p>}
-      <dl className="mt-2.5 flex flex-col gap-2.5 text-sm sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-1">
+      {/* One credit per line, so each sits in the same place in every row; from sm up the names line up in a column. */}
+      <dl className="mt-2.5 flex flex-col gap-2.5 text-sm sm:grid sm:grid-cols-[auto_1fr] sm:items-baseline sm:gap-x-3 sm:gap-y-1">
         <Credit label={song.instrumental ? t.song.firstPlayer : t.song.firstSinger} value={song.first_singer} />
         <Credit label={t.song.singer} value={song.artist} />
+        <Credit label={t.song.requestedBy} value={song.requested_by} />
       </dl>
     </div>
   );
@@ -231,7 +234,7 @@ function Credits({ lang, song }: { lang: Lang; song: Song }) {
 function Credit({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+    <div className="flex min-w-0 flex-col gap-0.5 sm:contents">
       <dt className="shrink-0 text-[10.5px] tracking-[0.14em] uppercase text-brass/75">{label}</dt>
       <dd className="text-cream">{value}</dd>
     </div>
