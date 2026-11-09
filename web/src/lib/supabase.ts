@@ -58,6 +58,10 @@ export type SongRequest = {
   email: string;
   /** The language of the page it was sent from. */
   lang: "el" | "en";
+  /** The same for the songs of one form; Stripe gives it back with the payment. Null in requests from before payments were tracked. */
+  form: string | null;
+  /** When Stripe said the form was paid for. Null: no payment seen (yet). */
+  paid_at: string | null;
   created_at: string;
 };
 

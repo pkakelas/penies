@@ -163,6 +163,7 @@ const el = {
     untitled: "Χωρίς τίτλο",
     requests: "Αιτήματα",
     requestDone: "Έγινε",
+    requestPaid: "Πληρώθηκε",
     confirmRequestDone: "Να διαγραφεί το αίτημα;",
   },
 };
@@ -293,6 +294,7 @@ const en: Dict = {
     untitled: "Untitled",
     requests: "Requests",
     requestDone: "Done",
+    requestPaid: "Paid",
     confirmRequestDone: "Delete this request?",
   },
 };

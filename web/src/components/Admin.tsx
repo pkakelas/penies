@@ -143,7 +143,7 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
   const load = useCallback(async () => {
     const [songRows, requestRows] = await Promise.all([
       supabaseBrowser().from("songs").select("*").order("created_at", { ascending: false }),
-      supabaseBrowser().from("song_requests").select("*").order("created_at", { ascending: true }),
+      supabaseBrowser().from("song_requests").select("*").order("created_at", { ascending: true }).order("seq", { ascending: true }),
     ]);
     if (!songRows.error) setSongs(songRows.data as Song[]);
     if (!requestRows.error) setRequests(requestRows.data as SongRequest[]);
@@ -238,6 +238,7 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
                       <time dateTime={request.created_at} className="tabular-nums">
                         {new Date(request.created_at).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" })}
                       </time>
+                      {request.paid_at && <span className="text-brass-bright">{t.requestPaid}</span>}
                     </p>
                   </div>
                   <button type="button" className={`${quiet} shrink-0`} onClick={() => finishRequest(request)}>

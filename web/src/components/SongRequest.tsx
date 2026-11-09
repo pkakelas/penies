@@ -47,8 +47,8 @@ export function SongRequest({
   const titleId = useId();
   const [state, setState] = useState<"idle" | "sending" | "failed">("idle");
   const paid = useSyncExternalStore(paidReturn.subscribe, paidReturn.read, () => false);
-  // The requests already saved from this form, so pressing Pay again after coming back does not save them twice.
-  const saved = useRef("");
+  // The requests already saved from this form and the id they were saved under, so pressing Pay again after coming back does not save them twice.
+  const saved = useRef({ key: "", form: "" });
 
   // Back from the payment page.
   useEffect(() => {
@@ -89,23 +89,26 @@ export function SongRequest({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email"));
-    const rows = form.getAll("song").map((song) => ({ song: String(song), email, lang }));
+    const songs = form.getAll("song").map(String);
     if (!PAYMENT_LINK) {
       setState("failed");
       return;
     }
     setState("sending");
-    const key = JSON.stringify(rows);
-    if (saved.current !== key) {
+    const key = JSON.stringify([songs, email, lang]);
+    if (saved.current.key !== key) {
+      // One id for the songs of this form. Stripe hands it back with the payment, which is how the database knows which requests were paid for.
+      const id = crypto.randomUUID();
+      const rows = songs.map((song) => ({ song, email, lang, form: id }));
       const { error } = await supabaseBrowser().from("song_requests").insert(rows);
       if (error) {
         setState("failed");
         return;
       }
-      saved.current = key;
+      saved.current = { key, form: id };
     }
-    // The same email on the payment page, so the payment can be matched to the requests.
     const pay = new URL(PAYMENT_LINK, window.location.href);
+    pay.searchParams.set("client_reference_id", saved.current.form);
     pay.searchParams.set("prefilled_email", email);
     pay.searchParams.set("locale", lang);
     remember(lang);
