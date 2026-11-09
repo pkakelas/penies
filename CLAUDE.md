@@ -39,7 +39,7 @@ Songs are only processed while the worker is running. Supabase cannot run `yt-dl
 - Bucket `stems` (private): `<song id>/<stem>.mp3` for `instruments`, `lead-guitar`, `vocals`. Songs split before the preset also have `rhythm-guitar`, which is not inside their `instruments`; the player adds it to the backing when a song has it. A stem can be downloaded by whoever can read its song, so a draft's audio is admin-only. About 24 MB per song.
 - Public sign-up is off. An admin "username" is the Supabase Auth email `username@admin.penia.app` (`ADMIN_EMAIL_DOMAIN`, defined in both `worker.py` and `web/src/lib/supabase.ts`; keep them equal).
 - Schema changes: add a migration, then `supabase db push` (needs `SUPABASE_DB_PASSWORD` from `.env`). Push a migration before deploying site code that reads what it adds.
-- `/robots.txt` (`web/src/app/robots.txt`) keeps crawlers out of `/admin` and `/en/admin`.
+- There is no `robots.txt`, on purpose: the two admin pages keep themselves out of search results with a noindex tag (`robots` in their `metadata`), and a crawler only sees that tag if it is allowed to fetch the page.
 
 ## Secrets
 
