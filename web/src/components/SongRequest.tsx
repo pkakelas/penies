@@ -7,8 +7,11 @@ import { supabaseBrowser } from "@/lib/supabase";
 const field =
   "mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-base text-cream placeholder:text-sand/60 transition-colors focus:border-brass focus:outline-none";
 
-/** A button that opens a form for asking for a song. The request shows up in /admin. */
-export function SongRequest({ lang, t }: { lang: Lang; t: Dict["request"] }) {
+/**
+ * A button that opens a form for asking for a song. The request shows up in
+ * /admin. `song` is what the form's song field starts with.
+ */
+export function SongRequest({ lang, t, song = "" }: { lang: Lang; t: Dict["request"]; song?: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [state, setState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
@@ -83,7 +86,7 @@ export function SongRequest({ lang, t }: { lang: Lang; t: Dict["request"] }) {
               <p className="mt-3 text-sm leading-relaxed text-sand">{t.note}</p>
               <label className="mt-7 block text-sm text-sand">
                 {t.song}
-                <input name="song" required minLength={2} maxLength={300} placeholder={t.songPlaceholder} className={field} />
+                <input name="song" defaultValue={song} required minLength={2} maxLength={300} placeholder={t.songPlaceholder} className={field} />
               </label>
               <label className="mt-5 block text-sm text-sand">
                 {t.email}

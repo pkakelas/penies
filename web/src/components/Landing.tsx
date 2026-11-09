@@ -28,7 +28,8 @@ export function Landing({ lang }: { lang: Lang }) {
           </div>
         </section>
 
-        <section id="songs" className="scroll-mt-10 border-t border-line bg-coal">
+        {/* At least a screen tall, so the search box stays where it is when a search shortens the list. */}
+        <section id="songs" className="min-h-dvh scroll-mt-10 border-t border-line bg-coal">
           <div className="mx-auto max-w-6xl px-6 py-24 sm:px-10 sm:py-32">
             <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
               <h2 className="font-display text-5xl tracking-tight sm:text-6xl">{t.songs.title}</h2>

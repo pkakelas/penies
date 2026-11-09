@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { dictionaries, formatTime, href, SITE_NAME, type Lang } from "@/lib/i18n";
 import { getPublishedSongs } from "@/lib/songs";
+import { searchKey } from "@/lib/search";
 import { playableLength, type Song } from "@/lib/supabase";
+import { SongSearch, type SongRow } from "./SongSearch";
 
 // Old record labels came in a few colours; each song takes the next one.
 const LABELS = [
@@ -12,36 +14,45 @@ const LABELS = [
 
 const GROOVES = [76, 79, 82, 85, 88, 91, 94];
 
-/** The published songs, each one a 78 rpm record. */
+/** The published songs, each one a 78 rpm record, under a search box. */
 export async function SongList({ lang }: { lang: Lang }) {
   const t = dictionaries[lang];
   const songs = await getPublishedSongs();
   if (songs.length === 0) return <p className="mt-14 text-sand">{t.songs.empty}</p>;
-  return (
-    <ol className="mt-14 border-t border-line">
-      {songs.map((song, i) => (
-        <li key={song.id} className="border-b border-line">
-          <Link
-            href={href(lang, `/songs/${song.slug}`)}
-            className="song group grid grid-cols-[7.5rem_minmax(0,1fr)_auto] items-center gap-x-5 gap-y-4 py-6 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:gap-x-8 sm:gap-y-2 sm:py-6 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:gap-x-10"
-          >
-            <span className="col-span-2 font-display text-2xl leading-tight transition-colors group-hover:text-brass-bright sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-end sm:text-4xl lg:text-[2.75rem]">
-              {song.title || t.admin.untitled}
-            </span>
-            <span
-              aria-hidden="true"
-              className="text-xl text-sand transition-all group-hover:translate-x-1.5 group-hover:text-brass-bright sm:col-start-3 sm:row-span-2 sm:row-start-1"
-            >
-              →
-            </span>
-            <Disc lang={lang} song={song} number={i + 1} />
-            <Credits lang={lang} song={song} />
-            <span className="sr-only">{t.songs.open}</span>
-          </Link>
-        </li>
-      ))}
-    </ol>
-  );
+  const rows: SongRow[] = songs.map((song, i) => ({
+    id: song.id,
+    // What a song is found by: everything the list shows about it.
+    key: searchKey(
+      [
+        song.title,
+        song.composer,
+        song.first_singer,
+        song.artist,
+        song.first_performed,
+        song.instrumental ? t.song.instrumental : "",
+      ].join(" "),
+    ),
+    row: (
+      <Link
+        href={href(lang, `/songs/${song.slug}`)}
+        className="song group grid grid-cols-[7.5rem_minmax(0,1fr)_auto] items-center gap-x-5 gap-y-4 py-6 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:gap-x-8 sm:gap-y-2 sm:py-6 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:gap-x-10"
+      >
+        <span className="col-span-2 font-display text-2xl leading-tight transition-colors group-hover:text-brass-bright sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-end sm:text-4xl lg:text-[2.75rem]">
+          {song.title || t.admin.untitled}
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-xl text-sand transition-all group-hover:translate-x-1.5 group-hover:text-brass-bright sm:col-start-3 sm:row-span-2 sm:row-start-1"
+        >
+          →
+        </span>
+        <Disc lang={lang} song={song} number={i + 1} />
+        <Credits lang={lang} song={song} />
+        <span className="sr-only">{t.songs.open}</span>
+      </Link>
+    ),
+  }));
+  return <SongSearch lang={lang} t={t.songs} request={t.request} songs={rows} />;
 }
 
 /** A record under a lamp. Its label carries the date of the first performance. */
@@ -128,7 +139,9 @@ function Credit({ label, value }: { label: string; value: string }) {
 
 export function SongListSkeleton() {
   return (
-    <div aria-hidden="true" className="mt-14 border-t border-line">
+    <div aria-hidden="true">
+      <div className="mt-10 h-12.5 rounded-full border border-line bg-ink sm:max-w-sm" />
+      <div className="mt-10 border-t border-line" />
       {[0, 1, 2].map((i) => (
         <div key={i} className="flex items-center gap-8 border-b border-line py-6 lg:gap-10">
           <span className="aspect-square w-30 shrink-0 rounded-full bg-cream/5 sm:w-32 lg:w-38" />

@@ -54,6 +54,9 @@ const el = {
     title: "Τραγούδια",
     empty: "Τα πρώτα τραγούδια ανεβαίνουν σύντομα.",
     open: "Άνοιγμα",
+    search: "Αναζήτηση",
+    searchPlaceholder: "Τίτλος, συνθέτης, τραγουδιστής",
+    noMatch: "Δεν βρέθηκε τραγούδι.",
   },
   request: {
     button: "Ζήτα ένα τραγούδι",
@@ -174,6 +177,9 @@ const en: Dict = {
     title: "Songs",
     empty: "The first songs are on their way.",
     open: "Open",
+    search: "Search",
+    searchPlaceholder: "Title, composer, singer",
+    noMatch: "No song found.",
   },
   request: {
     button: "Request a song",
