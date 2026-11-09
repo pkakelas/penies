@@ -3,7 +3,7 @@ import { dictionaries, formatTime, href, SITE_NAME, type Lang } from "@/lib/i18n
 import { getPublishedSongs } from "@/lib/songs";
 import { searchKey } from "@/lib/search";
 import { playableLength, type Song } from "@/lib/supabase";
-import { SongSearch, type SongRow } from "./SongSearch";
+import { SongSearch, type Filter, type SongRow } from "./SongSearch";
 
 // Old record labels came in a few colours; each song takes the next one.
 const LABELS = [
@@ -21,6 +21,8 @@ export async function SongList({ lang }: { lang: Lang }) {
   if (songs.length === 0) return <p className="mt-14 text-sand">{t.songs.empty}</p>;
   const rows: SongRow[] = songs.map((song, i) => ({
     id: song.id,
+    composers: composersOf(song).map(searchKey),
+    singers: singersOf(song).map(searchKey),
     // What a song is found by: everything the list shows about it.
     key: searchKey(
       [
@@ -52,7 +54,53 @@ export async function SongList({ lang }: { lang: Lang }) {
       </Link>
     ),
   }));
-  return <SongSearch lang={lang} t={t.songs} request={t.request} songs={rows} />;
+  return (
+    <SongSearch
+      lang={lang}
+      t={t.songs}
+      request={t.request}
+      songs={rows}
+      filters={[
+        { by: "composers", label: t.songs.byComposer, people: peopleOf(songs, composersOf, lang) },
+        { by: "singers", label: t.songs.bySinger, people: peopleOf(songs, singersOf, lang) },
+      ]}
+    />
+  );
+}
+
+/** The names typed in one field, which holds several with commas between them. */
+function names(field: string): string[] {
+  return field
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function composersOf(song: Song): string[] {
+  return names(song.composer);
+}
+
+/** Who sang the song first and who sings it in this recording. */
+function singersOf(song: Song): string[] {
+  return [...names(song.first_singer), ...names(song.artist)];
+}
+
+/**
+ * The people the list can be narrowed to, the one with the most songs first.
+ * Two spellings that sound the same are one person, shown as first spelled.
+ */
+function peopleOf(songs: Song[], of: (song: Song) => string[], lang: Lang): Filter["people"] {
+  const people = new Map<string, { name: string; count: number }>();
+  for (const song of songs) {
+    // Once per song: the first singer often sings in the recording too.
+    for (const [id, name] of new Map(of(song).map((name) => [searchKey(name), name]))) {
+      const person = people.get(id) ?? { name, count: 0 };
+      people.set(id, { ...person, count: person.count + 1 });
+    }
+  }
+  return [...people]
+    .map(([id, person]) => ({ id, ...person }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, lang));
 }
 
 /** A record under a lamp. Its label carries the date of the first performance. */
@@ -140,7 +188,7 @@ function Credit({ label, value }: { label: string; value: string }) {
 export function SongListSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className="mt-10 h-12.5 rounded-full border border-line bg-ink sm:max-w-sm" />
+      <div className="mt-10 h-12.5 rounded-full border border-line bg-ink" />
       <div className="mt-10 border-t border-line" />
       {[0, 1, 2].map((i) => (
         <div key={i} className="flex items-center gap-8 border-b border-line py-6 lg:gap-10">

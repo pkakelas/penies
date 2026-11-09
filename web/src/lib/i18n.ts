@@ -57,6 +57,9 @@ const el = {
     search: "Αναζήτηση",
     searchPlaceholder: "Τίτλος, συνθέτης, τραγουδιστής",
     noMatch: "Δεν βρέθηκε τραγούδι.",
+    all: "Όλα",
+    byComposer: "Μουσική",
+    bySinger: "Ερμηνεία",
   },
   request: {
     button: "Ζήτα ένα τραγούδι",
@@ -180,6 +183,9 @@ const en: Dict = {
     search: "Search",
     searchPlaceholder: "Title, composer, singer",
     noMatch: "No song found.",
+    all: "All",
+    byComposer: "Music",
+    bySinger: "Voice",
   },
   request: {
     button: "Request a song",
