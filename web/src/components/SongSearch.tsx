@@ -26,7 +26,8 @@ const chipOn = "border-brass bg-brass font-medium text-ink";
  * The song list under a search box and rows of buttons, one row for the
  * composers and one for the singers. Typing or choosing a person hides the
  * songs that do not match; when a search leaves none, the visitor can ask for
- * what they typed.
+ * what they typed. The list always ends with the row that opens the request
+ * form.
  *
  * One thing narrows the list at a time: typing lets go of the person chosen,
  * and choosing a person empties the box and lets go of the one before. Two at
@@ -38,9 +39,11 @@ export function SongSearch(props: {
   t: Dict["songs"];
   request: Dict["request"];
   songs: SongRow[];
+  /** The last row, as drawn by SongList: it opens the request form. */
+  blank: ReactNode;
   filters: Filter[];
 }) {
-  const { lang, t, request, songs, filters } = props;
+  const { lang, t, request, songs, blank, filters } = props;
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<{ by: Filter["by"]; id: string } | null>(null);
   const shown =
@@ -132,6 +135,11 @@ export function SongSearch(props: {
             {song.row}
           </li>
         ))}
+        <li className="border-b border-line">
+          <SongRequest lang={lang} t={request}>
+            {blank}
+          </SongRequest>
+        </li>
       </ol>
       {none && (
         <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line pt-10">

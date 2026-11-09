@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { href, type Dict, type Lang } from "@/lib/i18n";
 import { supabaseBrowser } from "@/lib/supabase";
 
@@ -11,27 +20,28 @@ const PAYMENT_LINK = process.env.NEXT_PUBLIC_PAYMENT_LINK;
 /** Kept for the tab while the visitor is away paying: the language of the page they left. */
 const PAYING = "penia-paying";
 
-const field =
-  "mt-2 w-full rounded-xl border border-line bg-ink px-4 py-3 text-base text-cream placeholder:text-sand/60 transition-colors focus:border-brass focus:outline-none";
-
 /**
  * A button that opens a form for asking for three songs, which are paid for
  * together. The requests are saved (they show up in /admin) and the visitor
  * goes to the payment page; back from it, the form says the payment was made.
  * `song` is what the first song field starts with. `header` is the smaller
  * button of the top bar, which is on every page: that one opens by itself
- * when the visitor comes back from paying, so a page shows it once.
+ * when the visitor comes back from paying, so a page shows it once. With
+ * `children` there is no button to see: they are what opens the form (the
+ * song list's last row).
  */
 export function SongRequest({
   lang,
   t,
   song = "",
   header = false,
+  children,
 }: {
   lang: Lang;
   t: Dict["request"];
   song?: string;
   header?: boolean;
+  children?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -104,15 +114,21 @@ export function SongRequest({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={open}
-        className={`rounded-full border border-brass/60 font-medium text-brass-bright transition-colors hover:border-brass hover:bg-brass hover:text-ink ${
-          header ? "px-3.5 py-1.5 text-xs whitespace-nowrap sm:text-sm" : "px-5 py-2.5 text-sm"
-        }`}
-      >
-        {t.button}
-      </button>
+      {children ? (
+        <button type="button" onClick={open} className="song group block w-full text-left">
+          {children}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={open}
+          className={`rounded-full border border-brass/60 font-medium text-brass-bright transition-colors hover:border-brass hover:bg-brass hover:text-ink ${
+            header ? "px-3.5 py-1.5 text-xs whitespace-nowrap sm:text-sm" : "px-5 py-2.5 text-sm"
+          }`}
+        >
+          {t.button}
+        </button>
+      )}
       <dialog
         ref={dialog}
         aria-labelledby={titleId}
@@ -150,23 +166,47 @@ export function SongRequest({
             <form onSubmit={submit}>
               <p className="mt-5 leading-relaxed text-cream">{t.promise}</p>
               <p className="mt-3 text-sm leading-relaxed text-sand">{t.note}</p>
-              {Array.from({ length: PACK }, (_, i) => (
-                <label key={i} className={`${i ? "mt-4" : "mt-7"} block text-sm text-sand`}>
-                  {t.song} {i + 1}
-                  <input
-                    name="song"
-                    defaultValue={i ? "" : song}
-                    required
-                    minLength={2}
-                    maxLength={300}
-                    placeholder={t.songPlaceholder}
-                    className={field}
-                  />
-                </label>
-              ))}
-              <label className="mt-4 block text-sm text-sand">
-                {t.email}
-                <input name="email" type="email" required maxLength={254} autoComplete="email" className={field} />
+              {/* The songs as one list, like a setlist: a number, then the line to write on. */}
+              <ol className="mt-7 overflow-hidden rounded-2xl border border-line bg-ink">
+                {Array.from({ length: PACK }, (_, i) => (
+                  <li
+                    key={i}
+                    className="group/row border-t border-line transition-colors first:border-t-0 has-[:focus]:bg-ember has-[:focus]:shadow-[inset_2px_0_0_var(--color-brass)]"
+                  >
+                    <label className="flex cursor-text items-baseline gap-3.5 pr-4 pl-5">
+                      <span
+                        aria-hidden="true"
+                        className="w-4 shrink-0 font-display text-xl text-brass/45 transition-colors group-has-[:focus]/row:text-brass group-has-[input:not(:placeholder-shown)]/row:text-brass-bright"
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="sr-only">
+                        {t.song} {i + 1}
+                      </span>
+                      <input
+                        name="song"
+                        defaultValue={i ? "" : song}
+                        required
+                        minLength={2}
+                        maxLength={300}
+                        placeholder={t.examples[i]}
+                        className="min-w-0 flex-1 bg-transparent py-3.5 font-display text-lg text-cream placeholder:text-sand/45 focus:outline-none! sm:text-xl"
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ol>
+              {/* The email stands apart, so it does not read as a fourth song. */}
+              <label className="mt-4 flex cursor-text items-baseline gap-3.5 rounded-2xl border border-line bg-ink pr-4 pl-5 transition-colors has-[:focus]:border-brass">
+                <span className="shrink-0 text-sm text-sand">{t.email}</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  className="min-w-0 flex-1 bg-transparent py-3.5 text-base text-cream focus:outline-none!"
+                />
               </label>
               {state === "failed" && (
                 <p role="alert" className="mt-5 text-sm text-wine">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { dictionaries, formatTime, href, SITE_NAME, type Lang } from "@/lib/i18n";
 import { getPublishedSongs } from "@/lib/songs";
 import { searchKey } from "@/lib/search";
@@ -14,7 +15,26 @@ const LABELS = [
 
 const GROOVES = [76, 79, 82, 85, 88, 91, 94];
 
-/** The published songs, each one a 78 rpm record, under a search box. */
+/** One row of the list: the record, with the title and the notes beside it (under it on a phone). */
+const ROW =
+  "grid grid-cols-[7.5rem_minmax(0,1fr)_auto] items-center gap-x-5 gap-y-4 py-6 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:gap-x-8 sm:gap-y-2 sm:py-6 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:gap-x-10";
+const TITLE =
+  "col-span-2 font-display text-2xl leading-tight transition-colors group-hover:text-brass-bright sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-end sm:text-4xl lg:text-[2.75rem]";
+const ARROW = (
+  <span
+    aria-hidden="true"
+    className="text-xl text-sand transition-all group-hover:translate-x-1.5 group-hover:text-brass-bright sm:col-start-3 sm:row-span-2 sm:row-start-1"
+  >
+    →
+  </span>
+);
+const NOTES =
+  "col-span-2 border-l border-brass/30 pl-4 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:self-start sm:border-0 sm:pl-0";
+
+/**
+ * The published songs, each one a 78 rpm record, under a search box. The last
+ * row is a record with nothing on its label yet: it opens the request form.
+ */
 export async function SongList({ lang }: { lang: Lang }) {
   const t = dictionaries[lang];
   const songs = await getPublishedSongs();
@@ -37,17 +57,10 @@ export async function SongList({ lang }: { lang: Lang }) {
     row: (
       <Link
         href={href(lang, `/songs/${song.slug}`)}
-        className="song group grid grid-cols-[7.5rem_minmax(0,1fr)_auto] items-center gap-x-5 gap-y-4 py-6 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:gap-x-8 sm:gap-y-2 sm:py-6 lg:grid-cols-[9.5rem_minmax(0,1fr)_auto] lg:gap-x-10"
+        className={`song group ${ROW}`}
       >
-        <span className="col-span-2 font-display text-2xl leading-tight transition-colors group-hover:text-brass-bright sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:self-end sm:text-4xl lg:text-[2.75rem]">
-          {song.title || t.admin.untitled}
-        </span>
-        <span
-          aria-hidden="true"
-          className="text-xl text-sand transition-all group-hover:translate-x-1.5 group-hover:text-brass-bright sm:col-start-3 sm:row-span-2 sm:row-start-1"
-        >
-          →
-        </span>
+        <span className={TITLE}>{song.title || t.admin.untitled}</span>
+        {ARROW}
         <Disc lang={lang} song={song} number={i + 1} />
         <Credits lang={lang} song={song} />
         <span className="sr-only">{t.songs.open}</span>
@@ -60,6 +73,33 @@ export async function SongList({ lang }: { lang: Lang }) {
       t={t.songs}
       request={t.request}
       songs={rows}
+      blank={
+        <span className={ROW}>
+          <span className={TITLE}>{t.request.blank}</span>
+          {ARROW}
+          <Record>
+            <circle cx="100" cy="100" r="72" fill="var(--color-ember)" />
+            <circle
+              cx="100"
+              cy="100"
+              r="69"
+              fill="none"
+              stroke="var(--color-brass)"
+              strokeOpacity="0.55"
+              strokeWidth="1"
+              strokeDasharray="3 5"
+            />
+            <path
+              d="M100 74v52M74 100h52"
+              fill="none"
+              stroke="var(--color-brass-bright)"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
+          </Record>
+          <span className={`${NOTES} text-sm text-cream/85 sm:text-base`}>{t.request.terms}</span>
+        </span>
+      }
       filters={[
         { by: "composers", label: t.songs.byComposer, people: peopleOf(songs, composersOf, lang) },
         { by: "singers", label: t.songs.bySinger, people: peopleOf(songs, singersOf, lang) },
@@ -111,48 +151,61 @@ function Disc({ lang, song, number }: { lang: Lang; song: Song; number: number }
   const top = `label-top-${song.id}`;
   const bottom = `label-bottom-${song.id}`;
   return (
+    <Record
+      defs={
+        <>
+          <path id={top} d="M 44 100 A 56 56 0 0 1 156 100" />
+          <path id={bottom} d="M 34 100 A 66 66 0 0 0 166 100" />
+        </>
+      }
+    >
+      <circle cx="100" cy="100" r="72" fill={label.paper} />
+      <circle cx="100" cy="100" r="69" fill="none" stroke={label.ink} strokeOpacity="0.35" strokeWidth="0.75" />
+      <g fill={label.ink}>
+        <text className="text-[13.5px] font-medium tracking-[0.1em] uppercase">
+          <textPath href={`#${top}`} startOffset="50%" textAnchor="middle">
+            {t.song.firstPerformed}
+          </textPath>
+        </text>
+        <text
+          x="100"
+          y="90"
+          textAnchor="middle"
+          className="font-display text-[33px]"
+          {...(date.length > 5 ? { textLength: 96, lengthAdjust: "spacingAndGlyphs" } : {})}
+        >
+          {date}
+        </text>
+        {playableLength(song) ? (
+          <text x="100" y="125" textAnchor="middle" className="text-[12px] tabular-nums">
+            {formatTime(playableLength(song)!)}
+          </text>
+        ) : null}
+        <text className="text-[11px] tracking-[0.1em]">
+          <textPath href={`#${bottom}`} startOffset="50%" textAnchor="middle">
+            {SITE_NAME[lang]} · {String(number).padStart(2, "0")}
+          </textPath>
+        </text>
+      </g>
+      <circle cx="100" cy="100" r="4" fill="#080605" />
+    </Record>
+  );
+}
+
+/** The shellac of a record, with its grooves, under a lamp. The children are its label, drawn on a 200 by 200 square. */
+function Record({ defs, children }: { defs?: ReactNode; children: ReactNode }) {
+  return (
     <span aria-hidden="true" className="relative block aspect-square sm:row-span-2 sm:row-start-1">
       <span className="pointer-events-none absolute -inset-10 rounded-full bg-[radial-gradient(closest-side,rgb(217_164_65/0.2),transparent)] opacity-0 transition-opacity duration-700 group-hover:opacity-100" />
       <span className="disc-roll relative block rounded-full shadow-2xl shadow-black/70">
         <svg viewBox="0 0 200 200" className="disc-spin block w-full">
-          <defs>
-            <path id={top} d="M 44 100 A 56 56 0 0 1 156 100" />
-            <path id={bottom} d="M 34 100 A 66 66 0 0 0 166 100" />
-          </defs>
+          {defs && <defs>{defs}</defs>}
           <circle cx="100" cy="100" r="100" fill="#080605" />
           <circle cx="100" cy="100" r="99.25" fill="none" stroke="rgb(243 236 224 / 0.16)" strokeWidth="1.5" />
           {GROOVES.map((r) => (
             <circle key={r} cx="100" cy="100" r={r} fill="none" stroke="rgb(243 236 224 / 0.07)" strokeWidth="0.75" />
           ))}
-          <circle cx="100" cy="100" r="72" fill={label.paper} />
-          <circle cx="100" cy="100" r="69" fill="none" stroke={label.ink} strokeOpacity="0.35" strokeWidth="0.75" />
-          <g fill={label.ink}>
-            <text className="text-[13.5px] font-medium tracking-[0.1em] uppercase">
-              <textPath href={`#${top}`} startOffset="50%" textAnchor="middle">
-                {t.song.firstPerformed}
-              </textPath>
-            </text>
-            <text
-              x="100"
-              y="90"
-              textAnchor="middle"
-              className="font-display text-[33px]"
-              {...(date.length > 5 ? { textLength: 96, lengthAdjust: "spacingAndGlyphs" } : {})}
-            >
-              {date}
-            </text>
-            {playableLength(song) ? (
-              <text x="100" y="125" textAnchor="middle" className="text-[12px] tabular-nums">
-                {formatTime(playableLength(song)!)}
-              </text>
-            ) : null}
-            <text className="text-[11px] tracking-[0.1em]">
-              <textPath href={`#${bottom}`} startOffset="50%" textAnchor="middle">
-                {SITE_NAME[lang]} · {String(number).padStart(2, "0")}
-              </textPath>
-            </text>
-          </g>
-          <circle cx="100" cy="100" r="4" fill="#080605" />
+          {children}
         </svg>
         <span className="disc-sheen absolute inset-0 rounded-full" />
       </span>
@@ -165,7 +218,7 @@ function Credits({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang];
   const head = [song.composer, song.first_performed].filter(Boolean).join(" · ");
   return (
-    <div className="col-span-2 border-l border-brass/30 pl-4 sm:col-span-1 sm:col-start-2 sm:row-start-2 sm:self-start sm:border-0 sm:pl-0">
+    <div className={NOTES}>
       {head && <p className="text-sm text-cream/85 sm:text-base">{head}</p>}
       <dl className="mt-2.5 flex flex-col gap-2.5 text-sm sm:flex-row sm:flex-wrap sm:gap-x-8 sm:gap-y-1">
         <Credit label={song.instrumental ? t.song.firstPlayer : t.song.firstSinger} value={song.first_singer} />

@@ -5,7 +5,7 @@ import { SongList, SongListSkeleton } from "./SongList";
 import { SongRequest } from "./SongRequest";
 import { Strings } from "./Strings";
 
-/** The home page: one line saying what Penies is, then the songs. */
+/** The home page: one line saying what Penies is, one saying that songs can be asked for, then the songs. */
 export function Landing({ lang }: { lang: Lang }) {
   const t = dictionaries[lang];
   return (
@@ -22,6 +22,11 @@ export function Landing({ lang }: { lang: Lang }) {
             <h1 className="rise font-display text-[clamp(2.7rem,8.2vw,6.75rem)] leading-[1.03] tracking-tight">
               {t.hero.title} <em className="text-brass-bright">{t.hero.titleEm}</em>
             </h1>
+            {/* What can be asked for, and the button that asks. */}
+            <div className="rise mt-8 flex flex-wrap items-center gap-x-6 gap-y-4 [animation-delay:160ms] sm:mt-10">
+              <p className="text-lg text-cream/85 sm:text-xl">{t.request.offer}</p>
+              <SongRequest lang={lang} t={t.request} />
+            </div>
           </div>
           <div className="mt-6 sm:mt-2">
             <Strings />
@@ -31,10 +36,7 @@ export function Landing({ lang }: { lang: Lang }) {
         {/* At least a screen tall, so the search box stays where it is when a search shortens the list. */}
         <section id="songs" className="min-h-dvh scroll-mt-10 border-t border-line bg-coal">
           <div className="mx-auto max-w-6xl px-6 py-24 sm:px-10 sm:py-32">
-            <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-6">
-              <h2 className="font-display text-5xl tracking-tight sm:text-6xl">{t.songs.title}</h2>
-              <SongRequest lang={lang} t={t.request} />
-            </div>
+            <h2 className="font-display text-5xl tracking-tight sm:text-6xl">{t.songs.title}</h2>
             <Suspense fallback={<SongListSkeleton />}>
               <SongList lang={lang} />
             </Suspense>
