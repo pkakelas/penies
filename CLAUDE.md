@@ -59,7 +59,7 @@ Next.js 16 (App Router, React 19, Tailwind v4) with `cacheComponents`. **This Ne
 - `src/components/SongRequest.tsx`: the "Request a song" button beside the list's heading and its form (a `<dialog>`), which inserts into `song_requests`.
 - `src/components/Admin.tsx`: sign-in, the open song requests (Done deletes one), add a video, progress of the worker (polled every 4 s while something is queued or processing), edit, test, publish/unpublish, delete.
 - `src/components/Header.tsx`: the top bar and the footer. The footer says who made the site and gives an email address to write to (`CONTACT`).
-- `src/components/Strings.tsx`: the bouzouki strings on the landing page (canvas; optional plucked-string sound, off by default).
+- `src/components/Strings.tsx`: the bouzouki strings on the landing page (canvas; they vibrate under the pointer, with no sound).
 - Design: warm black, cream and brass (colours and the `.range` slider in `src/app/globals.css`); Noto Serif Display for titles, Commissioner for text, both with Greek.
 
 ## Running

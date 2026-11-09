@@ -50,8 +50,6 @@ const el = {
   hero: {
     title: "Backing tracks για",
     titleEm: "μπουζούκι",
-    soundOn: "Ήχος χορδών: ανοιχτός",
-    soundOff: "Ήχος χορδών: κλειστός",
   },
   songs: {
     title: "Τραγούδια",
@@ -178,8 +176,6 @@ const en: Dict = {
   hero: {
     title: "Backing tracks for",
     titleEm: "bouzouki",
-    soundOn: "String sound: on",
-    soundOff: "String sound: off",
   },
   songs: {
     title: "Songs",

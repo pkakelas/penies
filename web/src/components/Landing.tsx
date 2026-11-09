@@ -24,7 +24,7 @@ export function Landing({ lang }: { lang: Lang }) {
             </h1>
           </div>
           <div className="mt-6 sm:mt-2">
-            <Strings soundOn={t.hero.soundOn} soundOff={t.hero.soundOff} />
+            <Strings />
           </div>
         </section>
 

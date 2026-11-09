@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 // The eight strings of a bouzouki as four pairs, highest on top, tuned
 // D-A-F-C. The two lower pairs are an octave apart, the two upper in unison.
+// `hz` only sets how fast a string swings on screen; there is no sound.
 const STRINGS = [
   { hz: 293.66, width: 1.0 },
   { hz: 293.66, width: 1.0 },
@@ -20,15 +21,9 @@ const SEGMENTS = 96;
 
 type Pluck = { at: number; x: number; amp: number };
 
-/**
- * Bouzouki strings across the page. Moving the pointer across a string
- * plucks it; with the sound switched on it also rings at its real pitch.
- */
-export function Strings({ soundOn, soundOff }: { soundOn: string; soundOff: string }) {
+/** Bouzouki strings across the page. Moving the pointer across a string makes it vibrate. */
+export function Strings() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pluckRef = useRef<(index: number, x: number, amp: number, audible: boolean) => void>(() => {});
-  const audioRef = useRef<{ ctx: AudioContext; buffers: Map<number, AudioBuffer>; out: GainNode } | null>(null);
-  const [sound, setSound] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -105,20 +100,10 @@ export function Strings({ soundOn, soundOff }: { soundOn: string; soundOff: stri
     observer.observe(canvas);
     resize();
 
-    const pluck = (i: number, x: number, amp: number, audible: boolean) => {
+    const pluck = (i: number, x: number, amp: number) => {
       plucks[i] = { at: performance.now(), x: Math.min(0.94, Math.max(0.06, x)), amp };
       wake();
-      const audio = audioRef.current;
-      if (audible && audio) {
-        const source = audio.ctx.createBufferSource();
-        const level = audio.ctx.createGain();
-        source.buffer = audio.buffers.get(STRINGS[i].hz)!;
-        level.gain.value = Math.min(1, amp / 14) * 0.6;
-        source.connect(level).connect(audio.out);
-        source.start();
-      }
     };
-    pluckRef.current = pluck;
 
     // Pluck every string the pointer crossed since its last position.
     let lastY: number | null = null;
@@ -132,7 +117,7 @@ export function Strings({ soundOn, soundOff }: { soundOn: string; soundOff: stri
         const strength = Math.min(16, Math.max(5, Math.abs(y - lastY) * 0.7));
         STRINGS.forEach((_, i) => {
           const at = stringY(i);
-          if (at >= from && at < to) pluck(i, (event.clientX - box.left) / box.width, calm ? 0 : strength, true);
+          if (at >= from && at < to) pluck(i, (event.clientX - box.left) / box.width, calm ? 0 : strength);
         });
       }
       lastY = inside ? y : null;
@@ -146,22 +131,22 @@ export function Strings({ soundOn, soundOff }: { soundOn: string; soundOff: stri
         if (Math.abs(stringY(i) - y) < Math.abs(stringY(nearest) - y)) nearest = i;
       });
       if (Math.abs(stringY(nearest) - y) < 24) {
-        pluck(nearest, (event.clientX - box.left) / box.width, calm ? 0 : 12, true);
+        pluck(nearest, (event.clientX - box.left) / box.width, calm ? 0 : 12);
       }
     };
     window.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerdown", onDown);
 
-    // A silent strum on arrival, then the odd soft pluck, so the strings look alive.
+    // A strum on arrival, then the odd soft pluck, so the strings look alive.
     const timers: number[] = [];
     if (!calm) {
       STRINGS.forEach((_, i) => {
-        timers.push(window.setTimeout(() => pluck(i, 0.72, 9, false), 700 + i * 70));
+        timers.push(window.setTimeout(() => pluck(i, 0.72, 9), 700 + i * 70));
       });
       timers.push(
         window.setInterval(() => {
           if (document.visibilityState === "visible" && plucks.every((p) => p === null)) {
-            pluck(Math.floor(Math.random() * STRINGS.length), 0.2 + Math.random() * 0.6, 5, false);
+            pluck(Math.floor(Math.random() * STRINGS.length), 0.2 + Math.random() * 0.6, 5);
           }
         }, 5200),
       );
@@ -176,64 +161,10 @@ export function Strings({ soundOn, soundOff }: { soundOn: string; soundOff: stri
     };
   }, []);
 
-  useEffect(() => () => void audioRef.current?.ctx.close(), []);
-
-  const toggleSound = () => {
-    if (sound) {
-      void audioRef.current?.ctx.suspend();
-      setSound(false);
-      return;
-    }
-    if (!audioRef.current) {
-      const ctx = new AudioContext();
-      const out = ctx.createGain();
-      out.gain.value = 0.5;
-      out.connect(ctx.destination);
-      const buffers = new Map<number, AudioBuffer>();
-      for (const { hz } of STRINGS) if (!buffers.has(hz)) buffers.set(hz, pluckedString(ctx, hz));
-      audioRef.current = { ctx, buffers, out };
-    }
-    void audioRef.current.ctx.resume();
-    setSound(true);
-    // Answer the click with a strum.
-    STRINGS.forEach((_, i) => window.setTimeout(() => pluckRef.current(i, 0.7, 11, true), i * 55));
-  };
-
   return (
-    <div className="relative">
-      <canvas
-        ref={canvasRef}
-        className="block h-[34svh] min-h-52 w-full touch-pan-y [mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]"
-      />
-      <div className="pointer-events-none absolute inset-x-0 bottom-3 mx-auto flex max-w-6xl items-center px-6 text-xs tracking-wide text-sand sm:px-10">
-        <button
-          type="button"
-          onClick={toggleSound}
-          aria-pressed={sound}
-          className="pointer-events-auto ml-auto flex items-center gap-2 rounded-full border border-line px-3 py-1.5 transition-colors hover:border-brass hover:text-cream"
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${sound ? "bg-brass-bright" : "bg-sand/50"}`} />
-          {sound ? soundOn : soundOff}
-        </button>
-      </div>
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="block h-[34svh] min-h-52 w-full touch-pan-y [mask-image:linear-gradient(to_right,transparent,black_14%,black_86%,transparent)]"
+    />
   );
-}
-
-/** A plucked steel string at `hz`, by Karplus-Strong synthesis. */
-function pluckedString(ctx: AudioContext, hz: number): AudioBuffer {
-  const rate = ctx.sampleRate;
-  const period = Math.round(rate / hz);
-  const buffer = ctx.createBuffer(1, Math.round(rate * 2.4), rate);
-  const out = buffer.getChannelData(0);
-  const ring = new Float32Array(period);
-  for (let i = 0; i < period; i++) ring[i] = Math.random() * 2 - 1;
-  let at = 0;
-  for (let i = 0; i < out.length; i++) {
-    const next = (at + 1) % period;
-    out[i] = ring[at];
-    ring[at] = (ring[at] + ring[next]) * 0.5 * 0.9965;
-    at = next;
-  }
-  return buffer;
 }
