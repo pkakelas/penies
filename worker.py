@@ -98,6 +98,19 @@ class Supabase:
         )
         return self._check(response).json()[0]
 
+    def remove_stems(self, song_id: str) -> None:
+        """Delete whatever is in the bucket under the song's folder."""
+        listing = self._check(self.http.post(
+            f"{self.url}/storage/v1/object/list/{BUCKET}",
+            json={"prefix": song_id, "limit": 100},
+            timeout=30,
+        )).json()
+        paths = [f"{song_id}/{entry['name']}" for entry in listing]
+        if paths:
+            self._check(self.http.delete(
+                f"{self.url}/storage/v1/object/{BUCKET}", json={"prefixes": paths}, timeout=60
+            ))
+
     def upload(self, path: str, file: Path) -> None:
         with file.open("rb") as handle:
             response = self.http.post(
@@ -169,33 +182,47 @@ def describe(song: dict, info: dict) -> dict:
     }
 
 
+class SongGone(Exception):
+    """The song's row was deleted (in /admin) while the worker was on it."""
+
+
 def process(db: Supabase, song: dict) -> None:
     """Split one song and leave it as a draft, or as failed with the reason."""
     song_id = song["id"]
     print(f"\n{song['youtube_url']} ({song_id})")
     last = {}
 
+    def update(fields: dict) -> dict:
+        """Change the song; stops the work if its row is gone."""
+        rows = db.update_song(song_id, fields)
+        if not rows:
+            raise SongGone
+        return rows[0]
+
     def report(step: str, detail: str) -> None:
         print(f"  {detail}")
         if (step, detail) != (last.get("step"), last.get("detail")):
             last.update(step=step, detail=detail)
-            db.update_song(song_id, {"step": step, "step_detail": detail})
+            update({"step": step, "step_detail": detail})
 
     try:
         report("download", "reading the video's details...")
         details = describe(song, guitar_split.video_info(song["youtube_url"]))
-        slug = db.update_song(song_id, details)[0]["slug"]
+        slug = update(details)["slug"]
         print(f"  {details['artist'] or '?'} - {details['title']}  (/songs/{slug})")
 
         files = guitar_split.split_song(song["youtube_url"], WORK / song_id, report=report)
         report("upload", "uploading the stems...")
         stems = upload_stems(db, song_id, files, song.get("instrumental", False))
-        db.update_song(
-            song_id,
-            {"status": "draft", "stems": stems, "step": "", "step_detail": "", "error": ""},
-        )
+        update({"status": "draft", "stems": stems, "step": "", "step_detail": "", "error": ""})
         shutil.rmtree(WORK / song_id, ignore_errors=True)
         print("  ready as a draft")
+    except SongGone:
+        # Deleted in /admin meanwhile: drop what was made for it. A run already
+        # submitted to MVSEP is paid for either way.
+        print("  deleted in /admin meanwhile; dropping its files")
+        shutil.rmtree(WORK / song_id, ignore_errors=True)
+        db.remove_stems(song_id)
     except (PipelineError, guitar_split.JobRefused, DownloadError, requests.RequestException) as error:
         print(f"  failed: {error}")
         # The work folder is kept, so a retry does not pay MVSEP twice.
