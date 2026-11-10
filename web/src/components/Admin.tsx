@@ -42,8 +42,8 @@ function youtubeId(input: string): string | null {
   return id && /^[\w-]{11}$/.test(id) ? id : null;
 }
 
-/** /admin: sign in, add a YouTube video, test the draft, publish. */
-export function Admin({ lang }: { lang: Lang }) {
+/** /admin: sign in, add a YouTube video, test the draft, publish. With `archive`, /admin/archive: the drafts put away. */
+export function Admin({ lang, archive = false }: { lang: Lang; archive?: boolean }) {
   const t = dictionaries[lang].admin;
   // undefined until the browser's saved sign-in has been read
   const [session, setSession] = useState<Session | null | undefined>(undefined);
@@ -86,7 +86,7 @@ export function Admin({ lang }: { lang: Lang }) {
           </button>
         </div>
       ) : (
-        <Dashboard lang={lang} onSignOut={signOut} />
+        <Dashboard lang={lang} archive={archive} onSignOut={signOut} />
       )}
     </main>
   );
@@ -133,7 +133,7 @@ function SignIn({ t }: { t: Dict["admin"] }) {
   );
 }
 
-function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
+function Dashboard({ lang, archive, onSignOut }: { lang: Lang; archive: boolean; onSignOut: () => void }) {
   const t = dictionaries[lang].admin;
   const [songs, setSongs] = useState<Song[] | null>(null);
   // What visitors asked for on the landing page, the one waiting longest first.
@@ -193,6 +193,7 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
   const drafts = songs?.filter((song) => song.status === "draft") ?? [];
   // In the landing page's order, so moving a song here moves it there.
   const published = orderSongs(songs?.filter((song) => song.status === "published") ?? []);
+  const archived = songs?.filter((song) => song.status === "archived") ?? [];
 
   /** Swap a published song with its neighbour, then number the whole list from 1. */
   const move = (song: Song, by: -1 | 1) => {
@@ -207,13 +208,19 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
   return (
     <>
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-5xl tracking-tight">{t.title}</h1>
+        <h1 className="font-display text-5xl tracking-tight">{archive ? t.archived : t.title}</h1>
         <button type="button" onClick={onSignOut} className={quiet}>
           {t.signOut}
         </button>
       </div>
 
-      <AddSong t={t} onAdded={load} />
+      {archive ? (
+        <a href={href(lang, "/admin")} className={`${quiet} mt-8 inline-block`}>
+          ← {t.title}
+        </a>
+      ) : (
+        <AddSong t={t} onAdded={load} />
+      )}
 
       {problem && (
         <p role="alert" className="mt-8 rounded-xl border border-wine/50 px-4 py-3 text-sm text-wine">
@@ -223,6 +230,12 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
 
       {songs === null ? (
         <p className="mt-12 text-sand">…</p>
+      ) : archive ? (
+        <Section title={t.archived} count={archived.length} none={t.none}>
+          {archived.map((song) => (
+            <SongCard key={song.id} lang={lang} song={song} onUpdate={update} onRemove={remove} />
+          ))}
+        </Section>
       ) : (
         <>
           {requests.length > 0 && (
@@ -301,6 +314,12 @@ function Dashboard({ lang, onSignOut }: { lang: Lang; onSignOut: () => void }) {
               />
             ))}
           </Section>
+
+          <a href={href(lang, "/admin/archive")} className={`${quiet} mt-14 inline-flex items-baseline gap-3`}>
+            {t.archived}
+            <span className="text-sand tabular-nums">{archived.length}</span>
+            <span aria-hidden>→</span>
+          </a>
         </>
       )}
     </>
@@ -410,7 +429,10 @@ function AddSong({ t, onAdded }: { t: Dict["admin"]; onAdded: () => Promise<void
 /** Where a published song sits in the list, and how to move it; a direction is missing at the ends. */
 type Order = { number: number; up?: () => Promise<boolean>; down?: () => Promise<boolean> };
 
-/** A finished song: fix its details, listen to it, publish it or take it down. Published songs can be moved in the list. */
+/**
+ * A finished song: fix its details, listen to it, publish it or take it down.
+ * Published songs can be moved in the list; drafts can be archived, and archived songs go back to the drafts.
+ */
 function SongCard(props: {
   lang: Lang;
   song: Song;
@@ -432,7 +454,10 @@ function SongCard(props: {
   const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
   const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
   const [busy, setBusy] = useState(false);
+  // Closed, the card is one line with the song's title; opened, it shows the details and the buttons.
+  const [open, setOpen] = useState(false);
   const isDraft = song.status === "draft";
+  const isArchived = song.status === "archived";
   const tenths = (seconds: number | null) => (seconds === null ? null : Math.round(seconds * 10) / 10);
   const start = tenths(parseTime(startsAt));
   const end = tenths(parseTime(endsAt));
@@ -477,11 +502,24 @@ function SongCard(props: {
   };
 
   return (
-    <li className="rounded-2xl border border-line bg-coal p-5 sm:p-6">
-      {order && (
-        <div className="mb-4 flex items-center gap-1">
+    <li className="rounded-2xl border border-line bg-coal">
+      <div className="flex items-center gap-3 px-5 py-3 sm:px-6">
+        {order && (
           <span className="font-display text-2xl text-brass tabular-nums">{String(order.number).padStart(2, "0")}</span>
-          <span className="ml-auto flex gap-1">
+        )}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex min-h-9 min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className={`truncate font-medium ${title.trim() ? "" : "text-sand"}`}>{title.trim() || t.untitled}</span>
+          <span aria-hidden className={`ml-auto shrink-0 text-sand transition-transform ${open ? "rotate-180" : ""}`}>
+            ▾
+          </span>
+        </button>
+        {order && (
+          <span className="flex shrink-0 gap-1">
             <OrderButton label={t.moveUp} onClick={order.up && (() => moveWith(order.up!))} disabled={busy}>
               ↑
             </OrderButton>
@@ -489,110 +527,124 @@ function SongCard(props: {
               ↓
             </OrderButton>
           </span>
+        )}
+      </div>
+      {open && (
+        <div className="border-t border-line p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs text-sand">
+              {t.songTitle}
+              <input value={title} onChange={(event) => setTitle(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.singer}
+              <input value={artist} onChange={(event) => setArtist(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.firstPerformed}
+              <input
+                value={firstPerformed}
+                onChange={(event) => setFirstPerformed(event.target.value)}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {instrumental ? labels.firstPlayer : labels.firstSinger}
+              <input
+                value={firstSinger}
+                onChange={(event) => setFirstSinger(event.target.value)}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.composer}
+              <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.requestedBy}
+              <input
+                value={requestedBy}
+                onChange={(event) => setRequestedBy(event.target.value)}
+                maxLength={100}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={instrumental}
+                onChange={(event) => setInstrumental(event.target.checked)}
+                className={checkbox}
+              />
+              {t.instrumental}
+            </label>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs text-sand">
+              {t.startsAt}
+              <input
+                value={startsAt}
+                onChange={(event) => setStartsAt(event.target.value)}
+                placeholder="0:00"
+                inputMode="numeric"
+                aria-invalid={badTrim}
+                className={`${field} mt-1.5 text-base tabular-nums`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {t.endsAt}
+              <input
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+                placeholder={full ? formatTime(full) : "–"}
+                inputMode="numeric"
+                aria-invalid={badTrim}
+                className={`${field} mt-1.5 text-base tabular-nums`}
+              />
+            </label>
+            <p className={`text-xs sm:col-span-2 ${badTrim ? "text-wine" : "text-sand/70"}`} role={badTrim ? "alert" : undefined}>
+              {badTrim ? t.badTime : t.trimHelp}
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || badTrim}
+              className={primary}
+              onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
+            >
+              {isDraft ? t.publish : isArchived ? t.restore : t.unpublish}
+            </button>
+            <a href={href(lang, `/songs/${song.slug}`)} target="_blank" rel="noreferrer" className={quiet}>
+              {isDraft || isArchived ? t.test : t.view} ↗
+            </a>
+            {edited && (
+              <button type="button" disabled={busy || badTrim} className={quiet} onClick={() => void run(details)}>
+                {t.save}
+              </button>
+            )}
+            {length ? (
+              <span className="ml-2 text-sm text-sand tabular-nums">
+                {t.plays} {formatTime(length)}
+                {full && Math.round(length) !== Math.round(full) ? ` / ${formatTime(full)}` : ""}
+              </span>
+            ) : null}
+            {isDraft && (
+              <button
+                type="button"
+                disabled={busy || badTrim}
+                className={`${danger} ml-auto`}
+                onClick={() => void run({ ...details, status: "archived" })}
+              >
+                {t.archive}
+              </button>
+            )}
+            <button type="button" disabled={busy} className={`${danger} ${isDraft ? "" : "ml-auto"}`} onClick={() => onRemove(song)}>
+              {t.remove}
+            </button>
+          </div>
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-sand">
-          {t.songTitle}
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.singer}
-          <input value={artist} onChange={(event) => setArtist(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.firstPerformed}
-          <input
-            value={firstPerformed}
-            onChange={(event) => setFirstPerformed(event.target.value)}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {instrumental ? labels.firstPlayer : labels.firstSinger}
-          <input
-            value={firstSinger}
-            onChange={(event) => setFirstSinger(event.target.value)}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.composer}
-          <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.requestedBy}
-          <input
-            value={requestedBy}
-            onChange={(event) => setRequestedBy(event.target.value)}
-            maxLength={100}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
-          <input
-            type="checkbox"
-            checked={instrumental}
-            onChange={(event) => setInstrumental(event.target.checked)}
-            className={checkbox}
-          />
-          {t.instrumental}
-        </label>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-sand">
-          {t.startsAt}
-          <input
-            value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
-            placeholder="0:00"
-            inputMode="numeric"
-            aria-invalid={badTrim}
-            className={`${field} mt-1.5 text-base tabular-nums`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {t.endsAt}
-          <input
-            value={endsAt}
-            onChange={(event) => setEndsAt(event.target.value)}
-            placeholder={full ? formatTime(full) : "–"}
-            inputMode="numeric"
-            aria-invalid={badTrim}
-            className={`${field} mt-1.5 text-base tabular-nums`}
-          />
-        </label>
-        <p className={`text-xs sm:col-span-2 ${badTrim ? "text-wine" : "text-sand/70"}`} role={badTrim ? "alert" : undefined}>
-          {badTrim ? t.badTime : t.trimHelp}
-        </p>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={busy || badTrim}
-          className={primary}
-          onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
-        >
-          {isDraft ? t.publish : t.unpublish}
-        </button>
-        <a href={href(lang, `/songs/${song.slug}`)} target="_blank" rel="noreferrer" className={quiet}>
-          {isDraft ? t.test : t.view} ↗
-        </a>
-        {edited && (
-          <button type="button" disabled={busy || badTrim} className={quiet} onClick={() => void run(details)}>
-            {t.save}
-          </button>
-        )}
-        {length ? (
-          <span className="ml-2 text-sm text-sand tabular-nums">
-            {t.plays} {formatTime(length)}
-            {full && Math.round(length) !== Math.round(full) ? ` / ${formatTime(full)}` : ""}
-          </span>
-        ) : null}
-        <button type="button" disabled={busy} className={`${danger} ml-auto`} onClick={() => onRemove(song)}>
-          {t.remove}
-        </button>
-      </div>
     </li>
   );
 }
