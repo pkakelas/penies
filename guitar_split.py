@@ -120,15 +120,29 @@ YTDL_OPTIONS = {
 }
 
 
-def video_info(url: str) -> dict:
-    """Title, id, duration (seconds) and uploader of a YouTube video."""
-    with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ydl:
+def video_info(url: str, comments: int = 0) -> dict:
+    """Title, id, duration (seconds), uploader and description of a YouTube video.
+
+    With `comments`, also the text of up to that many of its top comments
+    (no replies), which takes a few seconds more. The worker gives them to
+    Claude, who reads them for the song's composer and first recording.
+    """
+    options = dict(YTDL_OPTIONS)
+    if comments:
+        options.update({
+            "getcomments": True,
+            # max_comments is "comments,parents,replies,replies per thread".
+            "extractor_args": {"youtube": {"max_comments": [str(comments), "all", "0", "0"], "comment_sort": ["top"]}},
+        })
+    with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=False)
     return {
         "id": info["id"],
         "title": info.get("title") or info["id"],
         "duration": info.get("duration"),
         "uploader": info.get("uploader") or info.get("channel") or "",
+        "description": info.get("description") or "",
+        "comments": [c["text"] for c in info.get("comments") or [] if c.get("text")],
     }
 
 

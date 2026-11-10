@@ -5,8 +5,8 @@ Penies is a site for practising bouzouki over real recordings. A song from YouTu
 How a song gets onto the site:
 
 1. An admin signs in at `/admin` and pastes a YouTube link. The page inserts a `songs` row with status `queued`.
-2. `worker.py`, running on the user's Mac, picks the row up, runs the split, uploads three stems to Supabase Storage and sets the row to `draft`.
-3. The admin opens the draft's song page (only admins can see it), fixes title and artist, and presses Publish. Published songs are listed on the landing page.
+2. `worker.py`, running on the user's Mac, picks the row up, asks Claude for the song's details (see below), runs the split, uploads three stems to Supabase Storage and sets the row to `draft`.
+3. The admin opens the draft's song page (only admins can see it), corrects the details, and presses Publish. Published songs are listed on the landing page.
 
 Songs are only processed while the worker is running. Supabase cannot run `yt-dlp` or wait on MVSEP, which is why the worker lives on the Mac.
 
@@ -23,6 +23,7 @@ Songs are only processed while the worker is running. Supabase cannot run `yt-dl
   - `uv run worker.py add-admin USERNAME`: create an `/admin` login, or reset its password. Asks for the password in the terminal.
   - `uv run worker.py import FOLDER --url URL [--title T --artist A --publish]`: upload a song folder that was already split locally.
   - Intermediate files go to `work/<song id>/`; the folder is deleted on success and kept on failure so a retry does not pay for the MVSEP jobs again.
+  - Song details: before the split (step `details`), the worker reads the video's title, channel, description and up to 60 top comments with `yt-dlp` and asks Claude for `title`, `artist`, `composer`, `first_singer` and `first_performed`, in Greek (instructions in `CLAUDE_INSTRUCTIONS`, answer shaped by `SONG_DETAILS_SCHEMA`); a field Claude is not sure of comes back empty. The call is Claude Code headless, `claude -p --json-schema … --model opus`, run in the temp folder with no saved session and only `WebSearch` and `WebFetch` as tools (it is told to confirm the composer and the first recording on the web; about 40 s a song), so it goes on the Claude account signed in on the Mac, not on API credits (an `ANTHROPIC_API_KEY` in the environment would make `claude` use that instead). What the admin already typed wins, an empty title or artist falls back to splitting the video's title at a dash, and a retry whose details are all filled in asks nothing. If `claude` is missing, not signed in or fails, the song still goes through with the title guess and the step shows why. `import` does the same.
 - `supabase/`: `config.toml` and the migration that defines everything in the database (`migrations/20261106150000_songs.sql`).
 - `web/`: the Next.js site (see below).
 - `stems/player.html` + `stems/SignalsmithStretch.js`: the earlier standalone player, which opens a local song folder straight from disk. `stems/<song>/` holds local copies of a song's stems (five files in folders made before the preset, three now; it plays both). Not used by the site.

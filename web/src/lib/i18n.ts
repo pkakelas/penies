@@ -139,6 +139,7 @@ const el = {
     queued: "Στην ουρά",
     queuedHelp: "Περιμένει τον worker. Αν δεν προχωρά, τρέξε στον υπολογιστή: uv run worker.py",
     steps: {
+      details: "Στοιχεία τραγουδιού",
       download: "Λήψη από το YouTube",
       split: "Διαχωρισμός καναλιών",
       upload: "Ανέβασμα καναλιών",
@@ -272,6 +273,7 @@ const en: Dict = {
     queued: "Queued",
     queuedHelp: "Waiting for the worker. If it does not move, run on the computer: uv run worker.py",
     steps: {
+      details: "Finding the song's details",
       download: "Downloading from YouTube",
       split: "Separating the parts",
       upload: "Uploading the parts",

@@ -6,9 +6,11 @@
 """Penies worker: turns songs added on the site into playable drafts.
 
 An admin adds a YouTube link on /admin, which creates a "queued" row in the
-songs table. This worker picks the row up, splits the song with MVSEP
-(guitar_split.py), uploads the stems to the "stems" storage bucket and marks
-the song as a draft. The admin then tests it and presses Publish.
+songs table. This worker picks the row up, asks Claude for the song's title,
+singer, composer and first recording (from the video's title, description and
+top comments), splits the song with MVSEP (guitar_split.py), uploads the stems
+to the "stems" storage bucket and marks the song as a draft. The admin then
+checks the details, tests it and presses Publish.
 
 Songs are only processed while this is running:
 
@@ -22,17 +24,22 @@ Other commands:
                                           # upload a song folder that was split earlier
 
 Needs SUPABASE_URL, SUPABASE_SECRET_KEY and MVSEP_API_TOKEN, from the
-environment or from the .env file next to this script.
+environment or from the .env file next to this script. The song's details
+come from Claude Code (`claude -p`, signed in on this Mac); without it the
+title and artist are only guessed from the video's title.
 """
 
 from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -54,6 +61,13 @@ CONTENT_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac
 # maria@<this domain>. Keep in sync with ADMIN_EMAIL_DOMAIN in web/src/lib/supabase.ts.
 ADMIN_EMAIL_DOMAIN = "admin.penia.app"
 POLL_SECONDS = 5
+# How many of the video's top comments Claude reads for the song's details.
+COMMENTS = 60
+# Claude Code's model alias: the current Opus, on the account signed in here.
+CLAUDE_MODEL = "opus"
+CLAUDE_TIMEOUT = 600  # seconds
+# Claude may look the song up on the web, and nothing else.
+CLAUDE_TOOLS = "WebSearch,WebFetch"
 
 
 class Supabase:
@@ -136,7 +150,7 @@ def split_title(video_title: str) -> tuple[str, str]:
     return "", (parts[0] if parts else video_title.strip())
 
 
-# --- Processing --------------------------------------------------------------
+# --- Uploading ---------------------------------------------------------------
 
 def upload_stems(db: Supabase, song_id: str, files: dict[str, Path], instrumental: bool) -> dict[str, str]:
     """Upload the stem files; an instrumental's vocals stem is left out.
@@ -154,19 +168,119 @@ def upload_stems(db: Supabase, song_id: str, files: dict[str, Path], instrumenta
     return paths
 
 
-def describe(song: dict, info: dict) -> dict:
-    """Title, artist and duration for a song, from its YouTube video.
+# --- Song details ------------------------------------------------------------
 
-    A title the admin already typed is kept. Setting the title also sets the
+# The columns Claude fills in; the admin corrects them on the draft's page.
+DETAIL_FIELDS = ("title", "artist", "composer", "first_singer", "first_performed")
+
+
+# What Claude's answer must look like (JSON Schema, given to `claude --json-schema`).
+SONG_DETAILS_SCHEMA = {
+    "type": "object",
+    "properties": {field: {"type": "string"} for field in DETAIL_FIELDS},
+    "required": list(DETAIL_FIELDS),
+    "additionalProperties": False,
+}
+
+
+CLAUDE_INSTRUCTIONS = """\
+You identify Greek songs for Penies, a site where bouzouki players practise over real recordings \
+(rebetiko, laiko, smyrneiko and the like). You are given a YouTube video's title, channel, \
+description and top comments. Fill in the song's entry in the site's catalogue:
+
+- title: the song's name as Greek discographies write it, in Greek with accents, and nothing else \
+  (no artist, no "official audio", no quotes, no year).
+- artist: who sings in this recording; for an instrumental, who plays the lead. The channel is \
+  usually a record label or an uploader, not a performer.
+- composer: who wrote the music.
+- first_singer: who sang it first, on its first recording; for an instrumental, who first played it. \
+  When this recording is itself the first one, that is the artist.
+- first_performed: when it was first recorded, as free text, usually just the year ("1936"). When \
+  this recording is the first one, its own year.
+
+Write names in Greek script the way they are usually written (Μάρκος Βαμβακάρης, Ρόζα Εσκενάζυ); \
+several people are separated by commas. Start from what the video says and what you know of Greek \
+discography, then search the web (in Greek) to confirm the composer and the first recording: \
+discography databases, the song's Wikipedia page, record labels' pages. Comments often name the \
+composer and the first recording, and are often wrong, so check them too. A field the sources do \
+not settle stays empty (""). Never invent a name or a year.\
+"""
+
+
+def ask_claude(info: dict, instrumental: bool, report: guitar_split.Report) -> dict | None:
+    """Claude's reading of the video: a dict of DETAIL_FIELDS, or None if it could not answer.
+
+    Runs Claude Code headless (`claude -p`), so the call goes on the Claude
+    account signed in on this Mac, not on API credits. It runs in the temp
+    folder so the project's CLAUDE.md is not read, with web search and web
+    fetch as its only tools and no saved session. Whatever goes wrong here
+    only costs the details, never the song: the caller falls back to the
+    video's title.
+    """
+    if not shutil.which("claude"):
+        report("details", "Claude Code (claude) is not installed; guessing the title from the video")
+        return None
+    report("details", "asking Claude who wrote and sang it...")
+    lines = [f"Video title: {info['title']}", f"Channel: {info['uploader'] or '?'}"]
+    if instrumental:
+        lines.append("The admin marked this video as an instrumental (no singer).")
+    if info.get("description"):
+        lines += ["", "Description:", info["description"]]
+    if info.get("comments"):
+        lines += ["", "Top comments:"] + [f"- {text}" for text in info["comments"]]
+    command = [
+        "claude", "-p", "--output-format", "json", "--json-schema", json.dumps(SONG_DETAILS_SCHEMA),
+        "--system-prompt", CLAUDE_INSTRUCTIONS, "--model", CLAUDE_MODEL, "--effort", "high",
+        "--tools", CLAUDE_TOOLS, "--allowedTools", CLAUDE_TOOLS, "--strict-mcp-config", "--no-session-persistence",
+    ]
+    try:
+        run = subprocess.run(
+            command, input="\n".join(lines), capture_output=True, text=True,
+            cwd=tempfile.gettempdir(), timeout=CLAUDE_TIMEOUT,
+        )
+        answer = json.loads(run.stdout) if run.stdout.strip() else {}
+    except subprocess.TimeoutExpired:
+        report("details", "Claude took too long; guessing the title from the video")
+        return None
+    except (OSError, json.JSONDecodeError) as error:
+        report("details", f"could not run Claude ({type(error).__name__}); guessing the title from the video")
+        return None
+    found = answer.get("structured_output")
+    if run.returncode or answer.get("is_error") or not isinstance(found, dict):
+        # `result` says why ("Not logged in · Please run /login", ...).
+        why = str(answer.get("result") or run.stderr.strip() or f"exit code {run.returncode}")[:120]
+        report("details", f"Claude gave no answer ({why}); guessing the title from the video")
+        return None
+    return {field: str(found.get(field) or "").strip() for field in DETAIL_FIELDS}
+
+
+def describe(song: dict, info: dict, found: dict | None) -> dict:
+    """What the songs row should say, from the video and from Claude's answer.
+
+    Anything the admin already typed is kept; a field Claude left empty falls
+    back to splitting the video's title. Setting the title also sets the
     song's address: the database makes the slug from it (see the
     song_slug_from_title migration).
     """
     artist, title = split_title(info["title"])
-    return {
-        "title": song.get("title") or title,
-        "artist": song.get("artist") or artist,
-        "duration_seconds": info.get("duration"),
-    }
+    guess = {"title": title, "artist": artist, "composer": "", "first_singer": "", "first_performed": ""}
+    for field in DETAIL_FIELDS:
+        guess[field] = song.get(field) or (found or {}).get(field) or guess[field]
+    return {**guess, "duration_seconds": info.get("duration")}
+
+
+def find_details(song: dict, report: guitar_split.Report) -> dict:
+    """Read the video and ask Claude about it; see describe() for the result."""
+    report("details", "reading the video's title and comments...")
+    info = guitar_split.video_info(song["youtube_url"], comments=COMMENTS)
+    found = None
+    # A retry of a song whose details are all filled in asks nothing.
+    if not all(song.get(field) for field in DETAIL_FIELDS):
+        found = ask_claude(info, song.get("instrumental", False), report)
+    return describe(song, info, found)
+
+
+# --- Processing --------------------------------------------------------------
 
 
 def process(db: Supabase, song: dict) -> None:
@@ -182,10 +296,11 @@ def process(db: Supabase, song: dict) -> None:
             db.update_song(song_id, {"step": step, "step_detail": detail})
 
     try:
-        report("download", "reading the video's details...")
-        details = describe(song, guitar_split.video_info(song["youtube_url"]))
+        details = find_details(song, report)
         slug = db.update_song(song_id, details)[0]["slug"]
         print(f"  {details['artist'] or '?'} - {details['title']}  (/songs/{slug})")
+        if details["composer"] or details["first_singer"]:
+            print(f"  by {details['composer'] or '?'}, first sung by {details['first_singer'] or '?'} ({details['first_performed'] or '?'})")
 
         files = guitar_split.split_song(song["youtube_url"], WORK / song_id, report=report)
         report("upload", "uploading the stems...")
@@ -263,7 +378,7 @@ def import_folder(
         "status": "processing",
         "step": "upload",
     })
-    details = describe(song, guitar_split.video_info(url))
+    details = find_details(song, guitar_split.print_report)
     stems = upload_stems(db, song["id"], files, instrumental)
     slug = db.update_song(song["id"], {**details, "stems": stems, "status": "draft", "step": ""})[0]["slug"]
     if publish:
