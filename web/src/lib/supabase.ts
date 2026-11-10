@@ -10,7 +10,7 @@ export const STEMS_BUCKET = "stems";
 // maria@<this domain>. Keep in sync with ADMIN_EMAIL_DOMAIN in worker.py.
 export const ADMIN_EMAIL_DOMAIN = "admin.penia.app";
 
-export type SongStatus = "queued" | "processing" | "draft" | "published" | "failed";
+export type SongStatus = "queued" | "processing" | "draft" | "published" | "archived" | "failed";
 
 export type Song = {
   id: string;
