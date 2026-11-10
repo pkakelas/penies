@@ -49,7 +49,7 @@ BUCKET = "stems"
 # its own instead of inside instruments. `import` uploads it too, and the
 # site's player adds it to the backing.
 OLD_RHYTHM_STEM = "rhythm-guitar"
-CONTENT_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac"}
+CONTENT_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac"}
 # /admin logins are usernames; Supabase wants an email, so "maria" is stored as
 # maria@<this domain>. Keep in sync with ADMIN_EMAIL_DOMAIN in web/src/lib/supabase.ts.
 ADMIN_EMAIL_DOMAIN = "admin.penia.app"
