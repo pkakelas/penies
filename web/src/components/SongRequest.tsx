@@ -293,7 +293,7 @@ export function SongRequest({
           {visitor === undefined ? (
             <div aria-hidden="true" className="h-28" />
           ) : visitor === null && codeFor === null ? (
-            <form onSubmit={sendCode}>
+            <form key="email" onSubmit={sendCode}>
               <p className="mt-5 leading-relaxed text-cream">{t.signInNote}</p>
               <div className="mt-7 overflow-hidden rounded-2xl border border-line bg-ink">
                 <label className={field}>
@@ -319,7 +319,8 @@ export function SongRequest({
               </button>
             </form>
           ) : visitor === null ? (
-            <form onSubmit={checkCode}>
+            // Its own key, so React does not reuse the email field (same place in the tree) and keep the address in it.
+            <form key="code" onSubmit={checkCode}>
               <p className="mt-5 leading-relaxed text-cream">{t.codeSent}</p>
               <div className="mt-7 overflow-hidden rounded-2xl border border-line bg-ink">
                 <label className={field}>
