@@ -432,6 +432,8 @@ function SongCard(props: {
   const [startsAt, setStartsAt] = useState(song.start_seconds === null ? "" : formatTimeExact(song.start_seconds));
   const [endsAt, setEndsAt] = useState(song.end_seconds === null ? "" : formatTimeExact(song.end_seconds));
   const [busy, setBusy] = useState(false);
+  // Closed, the card is one line with the song's title; opened, it shows the details and the buttons.
+  const [open, setOpen] = useState(false);
   const isDraft = song.status === "draft";
   const tenths = (seconds: number | null) => (seconds === null ? null : Math.round(seconds * 10) / 10);
   const start = tenths(parseTime(startsAt));
@@ -477,11 +479,24 @@ function SongCard(props: {
   };
 
   return (
-    <li className="rounded-2xl border border-line bg-coal p-5 sm:p-6">
-      {order && (
-        <div className="mb-4 flex items-center gap-1">
+    <li className="rounded-2xl border border-line bg-coal">
+      <div className="flex items-center gap-3 px-5 py-3 sm:px-6">
+        {order && (
           <span className="font-display text-2xl text-brass tabular-nums">{String(order.number).padStart(2, "0")}</span>
-          <span className="ml-auto flex gap-1">
+        )}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex min-h-9 min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className={`truncate font-medium ${title.trim() ? "" : "text-sand"}`}>{title.trim() || t.untitled}</span>
+          <span aria-hidden className={`ml-auto shrink-0 text-sand transition-transform ${open ? "rotate-180" : ""}`}>
+            ▾
+          </span>
+        </button>
+        {order && (
+          <span className="flex shrink-0 gap-1">
             <OrderButton label={t.moveUp} onClick={order.up && (() => moveWith(order.up!))} disabled={busy}>
               ↑
             </OrderButton>
@@ -489,110 +504,114 @@ function SongCard(props: {
               ↓
             </OrderButton>
           </span>
+        )}
+      </div>
+      {open && (
+        <div className="border-t border-line p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs text-sand">
+              {t.songTitle}
+              <input value={title} onChange={(event) => setTitle(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.singer}
+              <input value={artist} onChange={(event) => setArtist(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.firstPerformed}
+              <input
+                value={firstPerformed}
+                onChange={(event) => setFirstPerformed(event.target.value)}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {instrumental ? labels.firstPlayer : labels.firstSinger}
+              <input
+                value={firstSinger}
+                onChange={(event) => setFirstSinger(event.target.value)}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.composer}
+              <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
+            </label>
+            <label className="block text-xs text-sand">
+              {labels.requestedBy}
+              <input
+                value={requestedBy}
+                onChange={(event) => setRequestedBy(event.target.value)}
+                maxLength={100}
+                className={`${field} mt-1.5 text-base`}
+              />
+            </label>
+            <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={instrumental}
+                onChange={(event) => setInstrumental(event.target.checked)}
+                className={checkbox}
+              />
+              {t.instrumental}
+            </label>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs text-sand">
+              {t.startsAt}
+              <input
+                value={startsAt}
+                onChange={(event) => setStartsAt(event.target.value)}
+                placeholder="0:00"
+                inputMode="numeric"
+                aria-invalid={badTrim}
+                className={`${field} mt-1.5 text-base tabular-nums`}
+              />
+            </label>
+            <label className="block text-xs text-sand">
+              {t.endsAt}
+              <input
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+                placeholder={full ? formatTime(full) : "–"}
+                inputMode="numeric"
+                aria-invalid={badTrim}
+                className={`${field} mt-1.5 text-base tabular-nums`}
+              />
+            </label>
+            <p className={`text-xs sm:col-span-2 ${badTrim ? "text-wine" : "text-sand/70"}`} role={badTrim ? "alert" : undefined}>
+              {badTrim ? t.badTime : t.trimHelp}
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || badTrim}
+              className={primary}
+              onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
+            >
+              {isDraft ? t.publish : t.unpublish}
+            </button>
+            <a href={href(lang, `/songs/${song.slug}`)} target="_blank" rel="noreferrer" className={quiet}>
+              {isDraft ? t.test : t.view} ↗
+            </a>
+            {edited && (
+              <button type="button" disabled={busy || badTrim} className={quiet} onClick={() => void run(details)}>
+                {t.save}
+              </button>
+            )}
+            {length ? (
+              <span className="ml-2 text-sm text-sand tabular-nums">
+                {t.plays} {formatTime(length)}
+                {full && Math.round(length) !== Math.round(full) ? ` / ${formatTime(full)}` : ""}
+              </span>
+            ) : null}
+            <button type="button" disabled={busy} className={`${danger} ml-auto`} onClick={() => onRemove(song)}>
+              {t.remove}
+            </button>
+          </div>
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-sand">
-          {t.songTitle}
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.singer}
-          <input value={artist} onChange={(event) => setArtist(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.firstPerformed}
-          <input
-            value={firstPerformed}
-            onChange={(event) => setFirstPerformed(event.target.value)}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {instrumental ? labels.firstPlayer : labels.firstSinger}
-          <input
-            value={firstSinger}
-            onChange={(event) => setFirstSinger(event.target.value)}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.composer}
-          <input value={composer} onChange={(event) => setComposer(event.target.value)} className={`${field} mt-1.5 text-base`} />
-        </label>
-        <label className="block text-xs text-sand">
-          {labels.requestedBy}
-          <input
-            value={requestedBy}
-            onChange={(event) => setRequestedBy(event.target.value)}
-            maxLength={100}
-            className={`${field} mt-1.5 text-base`}
-          />
-        </label>
-        <label className="flex items-center gap-2.5 text-sm text-sand sm:col-span-2">
-          <input
-            type="checkbox"
-            checked={instrumental}
-            onChange={(event) => setInstrumental(event.target.checked)}
-            className={checkbox}
-          />
-          {t.instrumental}
-        </label>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="block text-xs text-sand">
-          {t.startsAt}
-          <input
-            value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
-            placeholder="0:00"
-            inputMode="numeric"
-            aria-invalid={badTrim}
-            className={`${field} mt-1.5 text-base tabular-nums`}
-          />
-        </label>
-        <label className="block text-xs text-sand">
-          {t.endsAt}
-          <input
-            value={endsAt}
-            onChange={(event) => setEndsAt(event.target.value)}
-            placeholder={full ? formatTime(full) : "–"}
-            inputMode="numeric"
-            aria-invalid={badTrim}
-            className={`${field} mt-1.5 text-base tabular-nums`}
-          />
-        </label>
-        <p className={`text-xs sm:col-span-2 ${badTrim ? "text-wine" : "text-sand/70"}`} role={badTrim ? "alert" : undefined}>
-          {badTrim ? t.badTime : t.trimHelp}
-        </p>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={busy || badTrim}
-          className={primary}
-          onClick={() => void run({ ...details, status: isDraft ? "published" : "draft" })}
-        >
-          {isDraft ? t.publish : t.unpublish}
-        </button>
-        <a href={href(lang, `/songs/${song.slug}`)} target="_blank" rel="noreferrer" className={quiet}>
-          {isDraft ? t.test : t.view} ↗
-        </a>
-        {edited && (
-          <button type="button" disabled={busy || badTrim} className={quiet} onClick={() => void run(details)}>
-            {t.save}
-          </button>
-        )}
-        {length ? (
-          <span className="ml-2 text-sm text-sand tabular-nums">
-            {t.plays} {formatTime(length)}
-            {full && Math.round(length) !== Math.round(full) ? ` / ${formatTime(full)}` : ""}
-          </span>
-        ) : null}
-        <button type="button" disabled={busy} className={`${danger} ml-auto`} onClick={() => onRemove(song)}>
-          {t.remove}
-        </button>
-      </div>
     </li>
   );
 }
