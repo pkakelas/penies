@@ -1,40 +1,51 @@
-# Πενιές (Penies)
+# Πενιές
 
-A site for practising bouzouki over real recordings: https://www.penies.gr
+Play bouzouki along with the real records.
 
-A song from YouTube is split into three stems (the lead bouzouki, the vocals and everything else) with [MVSEP](https://mvsep.com). The site plays the backing with the bouzouki and the vocals on switches, at 50–150% speed without changing pitch. It is in Greek, with an English version at `/en`.
+**[www.penies.gr](https://www.penies.gr)**
 
-## How it works
+Learning a song by ear from the original recording is hard. The bouzouki is tangled up with everything else, it goes by fast, and the old masters won't slow down for you.
 
-1. An admin pastes a YouTube link at `/admin`, which queues the song in Supabase.
-2. `worker.py`, running on a Mac, picks it up, fills in the song's details with Claude, splits it with MVSEP and uploads the stems to Supabase Storage as a draft.
-3. The admin checks the draft, corrects the details and publishes it.
+Penies pulls the bouzouki out of the song. You get the band without it, so you can take its place, or with it, so you can hear exactly what it plays. You can mute the singer too, and slow the whole thing down to half speed (or speed it up) without the pitch changing.
 
-## Layout
+The site is in Greek, with an English version at [penies.gr/en](https://www.penies.gr/en). If the song you want isn't there yet, you can ask for it from the site.
 
-- `guitar_split.py`: the MVSEP pipeline (also usable on its own).
-- `worker.py`: connects Supabase to the pipeline.
-- `supabase/`: database schema, config and email templates.
-- `web/`: the Next.js site.
-- `stems/player.html`: an earlier standalone player for local stems.
+## How a song gets on the site
 
-## Running
+It starts with a YouTube link pasted into the admin page. A small script on a Mac picks it up, downloads the audio and asks Claude to look up who wrote the song and who sang it first. Then it sends the song to [MVSEP](https://mvsep.com), which splits it into three tracks: the bouzouki, the voice, and everything else. The tracks are stored in [Supabase](https://supabase.com), and once someone has listened to them and checked the details, the song goes up on the site.
 
-Requires macOS (audio goes through `afconvert`), [uv](https://docs.astral.sh/uv/) and Node.js. Copy `.env.example` to `.env` and fill it in, and give `web/` a `.env.local` with the Supabase URL and publishable key.
+The script runs on a Mac and not on a server because downloading from YouTube and waiting for MVSEP don't fit in a hosted database, and because it uses the audio tools that come with macOS.
+
+## What's in here
+
+| | |
+|---|---|
+| `web/` | The website (Next.js) |
+| `worker.py` | The script that processes new songs |
+| `guitar_split.py` | The part that talks to MVSEP |
+| `supabase/` | The database |
+| `stems/player.html` | An older player that opens tracks straight from your disk |
+
+## Running it yourself
+
+You'll need a Mac, [uv](https://docs.astral.sh/uv/) and Node.js. You'll also need your own Supabase project and MVSEP account: the MVSEP setup that does the splitting lives in a private account, so you'd have to build your own (it's described in `CLAUDE.md`).
+
+Copy `.env.example` to `.env` and fill it in, give `web/` a `.env.local` with your Supabase URL and publishable key, and then:
 
 ```bash
-uv run worker.py              # process songs added in /admin
-npm --prefix web run dev      # the site at http://localhost:3000
+uv run worker.py
 ```
-
-To split a single song without Supabase:
 
 ```bash
-uv run guitar_split.py "https://www.youtube.com/watch?v=VIDEO_ID"
+npm --prefix web run dev
 ```
 
-`CLAUDE.md` has the full details of the pipeline, the database and the site.
+The first one waits for new songs and processes them. The second one starts the site at http://localhost:3000.
+
+## More detail
+
+`CLAUDE.md` has the long version: how the splitting works and why, the database, payments and every page of the site. It was written as notes for Claude Code, which helped build this project, but it reads fine for people too.
 
 ## License
 
-[MIT](LICENSE.md). The player's time-stretching uses [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch), also MIT.
+MIT, see [LICENSE.md](LICENSE.md). The player slows songs down with [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch), which is MIT as well.
