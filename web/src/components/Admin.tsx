@@ -175,8 +175,8 @@ function Dashboard({ lang, archive, onSignOut }: { lang: Lang; archive: boolean;
   const remove = (song: Song) => {
     if (!window.confirm(t.confirmRemove)) return;
     void change(async () => {
-      // Stems in Supabase Storage go now. The ones in R2 are out of this
-      // page's reach: the worker deletes them once the song's row is gone.
+      // The stems are in R2, out of this page's reach: the worker deletes them
+      // once the song's row is gone. An old copy in Supabase Storage goes now.
       const paths = Object.values(song.stems);
       if (paths.length) {
         const { error } = await supabaseBrowser().storage.from(STEMS_BUCKET).remove(paths);
