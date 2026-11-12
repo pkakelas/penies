@@ -8,6 +8,12 @@ import { playableLength, playableRange, STEMS_BUCKET, supabaseBrowser, type Song
 const STEMS = ["instruments", "rhythm-guitar", "lead-guitar", "vocals"] as const;
 const MIN_SPEED = 50;
 const MAX_SPEED = 150;
+const MAX_TRANSPOSE = 6; // semitones, up or down
+const CLEAN_TRANSPOSE = 2; // semitones: further than this the player warns that the sound suffers
+
+/** A number of semitones with its sign: "+2", "0", "−3". */
+const signed = (semitones: number) =>
+  semitones > 0 ? `+${semitones}` : semitones < 0 ? `−${-semitones}` : "0";
 
 /**
  * The stems a song is played from. An instrumental's vocals stem, if one was
@@ -22,7 +28,8 @@ const fill = (value: number, min: number, max: number) =>
 
 /**
  * Plays a song's backing with the bouzouki and the vocals on switches, at
- * any speed from 50% to 150%. The audio itself is in lib/engine.ts.
+ * any speed from 50% to 150% and up to six semitones higher or lower. The
+ * audio itself is in lib/engine.ts.
  */
 export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang].player;
@@ -39,6 +46,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const [lead, setLead] = useState(false);
   const [vocals, setVocals] = useState(true);
   const [speed, setSpeed] = useState(100);
+  const [transpose, setTranspose] = useState(0);
 
   // Download and decode the stems.
   useEffect(() => {
@@ -99,6 +107,9 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   useEffect(() => {
     if (state === "ready") engine.current?.setRate(speed / 100);
   }, [state, speed]);
+  useEffect(() => {
+    if (state === "ready") engine.current?.setSemitones(transpose);
+  }, [state, transpose]);
 
   // Follow the position while playing; stop at the end.
   useEffect(() => {
@@ -231,46 +242,102 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
         />
       </div>
 
-      <div className="mt-8">
-        <div className="flex items-baseline justify-between">
-          <label htmlFor="speed" className="font-medium">
-            {t.speed}
-          </label>
-          <span className="flex items-baseline gap-4">
-            {speed !== 100 && (
-              <button
-                type="button"
-                onClick={() => setSpeed(100)}
-                className="text-sm text-sand underline decoration-line underline-offset-4 transition-colors hover:text-cream"
-              >
-                {t.reset}
-              </button>
-            )}
-            <output htmlFor="speed" className="font-display text-3xl tabular-nums">
-              {speed}%
-            </output>
-          </span>
-        </div>
-        <input
-          id="speed"
-          type="range"
-          className="range mt-2"
-          min={MIN_SPEED}
-          max={MAX_SPEED}
-          step={1}
-          value={speed}
-          style={fill(speed, MIN_SPEED, MAX_SPEED)}
-          onChange={(event) => setSpeed(Number(event.target.value))}
-        />
-        <div className="flex justify-between text-xs text-sand tabular-nums">
-          <span>{MIN_SPEED}%</span>
-          <span>100%</span>
-          <span>{MAX_SPEED}%</span>
-        </div>
-      </div>
+      <Slider
+        id="speed"
+        label={t.speed}
+        value={speed}
+        min={MIN_SPEED}
+        max={MAX_SPEED}
+        rest={100}
+        reset={t.reset}
+        shown={`${speed}%`}
+        marks={[`${MIN_SPEED}%`, "100%", `${MAX_SPEED}%`]}
+        onChange={setSpeed}
+      />
+      <Slider
+        id="transpose"
+        label={t.transpose}
+        value={transpose}
+        min={-MAX_TRANSPOSE}
+        max={MAX_TRANSPOSE}
+        rest={0}
+        reset={t.reset}
+        shown={signed(transpose)}
+        unit={Math.abs(transpose) === 1 ? t.semitone : t.semitones}
+        marks={[signed(-MAX_TRANSPOSE), "0", signed(MAX_TRANSPOSE)]}
+        warning={
+          Math.abs(transpose) > CLEAN_TRANSPOSE ? (hasVocals ? t.transposeFar : t.transposeFarNoVoice) : undefined
+        }
+        onChange={setTranspose}
+      />
 
       <p className="mt-8 hidden text-xs text-sand/80 sm:block">{t.spaceHint}</p>
     </section>
+  );
+}
+
+/** A labelled slider with its value in large type and a Reset link while it is away from `rest`. */
+function Slider(props: {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  /** The value Reset goes back to; it must be halfway, where the middle mark stands. */
+  rest: number;
+  reset: string;
+  shown: string;
+  unit?: string;
+  marks: [string, string, string];
+  /** Shown under the slider, in the warning colour. */
+  warning?: string;
+  onChange: (value: number) => void;
+}) {
+  const { id, label, value, min, max, rest, reset, shown, unit, marks, warning, onChange } = props;
+  return (
+    <div className="mt-8">
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={id} className="font-medium">
+          {label}
+        </label>
+        <span className="flex items-baseline gap-4">
+          {value !== rest && (
+            <button
+              type="button"
+              onClick={() => onChange(rest)}
+              className="text-sm text-sand underline decoration-line underline-offset-4 transition-colors hover:text-cream"
+            >
+              {reset}
+            </button>
+          )}
+          <output htmlFor={id} className="flex items-baseline gap-2">
+            <span className="font-display text-3xl tabular-nums">{shown}</span>
+            {unit && <span className="text-sm text-sand">{unit}</span>}
+          </output>
+        </span>
+      </div>
+      <input
+        id={id}
+        type="range"
+        className="range mt-2"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        aria-valuetext={unit ? `${shown} ${unit}` : shown}
+        style={fill(value, min, max)}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <div className="flex justify-between text-xs text-sand tabular-nums">
+        {marks.map((mark) => (
+          <span key={mark}>{mark}</span>
+        ))}
+      </div>
+      {/* Always in the page, so that a screen reader announces the warning when it appears. */}
+      <p role="status" className={warning ? "mt-3 text-sm text-wine" : undefined}>
+        {warning}
+      </p>
+    </div>
   );
 }
 

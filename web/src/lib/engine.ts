@@ -1,4 +1,5 @@
-// Plays a song's stems in sync, at any speed, without changing the pitch.
+// Plays a song's stems in sync. Speed and key are set apart: a change of speed
+// leaves the pitch alone, and a change of key leaves the speed alone.
 //
 // The stems are decoded and mixed into six channels:
 //   0-1  backing: instruments (always heard). Songs split before the MVSEP
@@ -6,11 +7,18 @@
 //   2-3  vocals
 //   4-5  lead guitar (the bouzouki)
 // All six go into ONE Signalsmith Stretch node (public/vendor/SignalsmithStretch.js),
-// which does the time-stretch; one node for everything keeps the stems aligned.
+// which does the time-stretch and the pitch shift; one node for everything keeps
+// the stems aligned (and so every stem is transposed together).
 // Its output is split back into the three pairs, with a gain on vocals and lead.
 
 type StretchNode = AudioWorkletNode & {
-  schedule(change: { active?: boolean; input?: number; output?: number; rate?: number }): Promise<unknown>;
+  schedule(change: {
+    active?: boolean;
+    input?: number;
+    output?: number;
+    rate?: number;
+    semitones?: number;
+  }): Promise<unknown>;
   addBuffers(channels: Float32Array[], transfer?: ArrayBuffer[]): Promise<number>;
   dropBuffers(): Promise<unknown>;
   configure(config: { preset?: "default" | "cheaper" }): Promise<unknown>;
@@ -103,6 +111,7 @@ export class StemEngine {
   private leadGain!: GainNode;
   private startDelay = 0; // seconds the stretcher needs to start a note cleanly
   private rate = 1;
+  private semitones = 0;
   // Where we are: at context time `anchorTime` the song was at `anchorPos`
   // seconds, and (while playing) it moves on from there at `rate`.
   private anchorPos = 0;
@@ -249,6 +258,12 @@ export class StemEngine {
     else this.report();
   }
 
+  /** Transpose every stem: 0 = the recording's own key, +1 = a semitone up. */
+  setSemitones(semitones: number): void {
+    this.semitones = semitones;
+    if (this.playing) this.startAt(this.position());
+  }
+
   setVocals(on: boolean): void {
     this.fade(this.vocalGain, on);
   }
@@ -281,7 +296,13 @@ export class StemEngine {
   private startAt(pos: number, delay = 0): void {
     this.anchorPos = pos;
     this.anchorTime = this.ctx.currentTime + delay;
-    void this.stretch.schedule({ active: true, input: pos, output: this.anchorTime, rate: this.rate });
+    void this.stretch.schedule({
+      active: true,
+      input: pos,
+      output: this.anchorTime,
+      rate: this.rate,
+      semitones: this.semitones,
+    });
     this.report();
   }
 
