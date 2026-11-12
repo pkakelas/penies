@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["yt-dlp", "requests"]
+# dependencies = ["yt-dlp", "requests", "boto3"]
 # ///
 """Penies worker: turns songs added on the site into playable drafts.
 
@@ -9,8 +9,9 @@ An admin adds a YouTube link on /admin, which creates a "queued" row in the
 songs table. This worker picks the row up, asks Claude for the song's title,
 singer, composer and first recording (from the video's title, description and
 top comments), splits the song with MVSEP (guitar_split.py), uploads the stems
-to the "stems" storage bucket and marks the song as a draft. The admin then
-checks the details, tests it and presses Publish.
+to the Cloudflare R2 bucket (to Supabase's "stems" bucket while R2 is not set
+up) and marks the song as a draft. The admin then checks the details, tests it
+and presses Publish.
 
 Songs are only processed while this is running:
 
@@ -22,9 +23,11 @@ Other commands:
     uv run worker.py add-admin USERNAME   # create an /admin login (asks for a password)
     uv run worker.py import "stems/Song" --url "https://youtube.com/watch?v=..."
                                           # upload a song folder that was split earlier
+    uv run worker.py to-r2                # copy the stems still in Supabase to R2
 
 Needs SUPABASE_URL, SUPABASE_SECRET_KEY and MVSEP_API_TOKEN, from the
-environment or from the .env file next to this script. The song's details
+environment or from the .env file next to this script; R2_ENDPOINT, R2_BUCKET,
+R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY put the stems in R2. The song's details
 come from Claude Code (`claude -p`, signed in on this Mac); without it the
 title and artist are only guessed from the video's title.
 """
@@ -42,8 +45,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
+import boto3
 import requests
+from boto3.exceptions import S3UploadFailedError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from yt_dlp.utils import DownloadError
 
 import guitar_split
@@ -57,6 +65,16 @@ BUCKET = "stems"
 # site's player adds it to the backing.
 OLD_RHYTHM_STEM = "rhythm-guitar"
 CONTENT_TYPES = {".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac"}
+# A song's stems never change, so a browser may keep them for good.
+STEM_CACHE = "max-age=31536000, immutable"
+# The R2 bucket, from .env. All four or none: without them the stems go to Supabase.
+R2_ENV = ("R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY")
+# The player downloads the stems from the visitor's browser, which only takes
+# them from another address if the bucket says so (CORS). The links are signed,
+# so which page asks does not matter.
+R2_CORS = [{"AllowedOrigins": ["*"], "AllowedMethods": ["GET", "HEAD"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 86400}]
+SITE = "https://www.penies.gr"
+SONG_ID = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 # /admin logins are usernames; Supabase wants an email, so "maria" is stored as
 # maria@<this domain>. Keep in sync with ADMIN_EMAIL_DOMAIN in web/src/lib/supabase.ts.
 ADMIN_EMAIL_DOMAIN = "admin.penia.app"
@@ -68,6 +86,90 @@ CLAUDE_MODEL = "opus"
 CLAUDE_TIMEOUT = 600  # seconds
 # Claude may look the song up on the web, and nothing else.
 CLAUDE_TOOLS = "WebSearch,WebFetch"
+
+
+class R2:
+    """The Cloudflare R2 bucket that holds the stems, through its S3 API.
+
+    Downloads from R2 cost nothing, which is why the stems are there and not
+    in Supabase Storage. The bucket is private: the site's visitors get signed
+    links from the database (stem_links), made with the same key as here.
+    """
+
+    def __init__(self, endpoint: str, bucket: str, access_key: str, secret_key: str) -> None:
+        # What the database needs to sign links (see Supabase.share_r2).
+        self.config = {"endpoint": endpoint, "bucket": bucket, "access_key": access_key, "secret_key": secret_key}
+        self.bucket = bucket
+        self.s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="auto",
+            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        )
+
+    @classmethod
+    def from_env(cls) -> R2 | None:
+        endpoint, bucket, access_key, secret_key = (os.environ.get(name, "").strip() for name in R2_ENV)
+        if not (endpoint or bucket or access_key or secret_key):
+            return None
+        if not (endpoint and bucket and access_key and secret_key):
+            sys.exit(f"error: set all of {', '.join(R2_ENV)} or none of them (see .env.example)")
+        # Cloudflare shows the address with the bucket's name after it; only the host is wanted.
+        address = urlsplit(endpoint if "://" in endpoint else f"https://{endpoint}")
+        return cls(f"https://{address.netloc}", bucket, access_key, secret_key)
+
+    def _call(self, what: str, function, *args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except (BotoCoreError, ClientError, S3UploadFailedError) as error:
+            raise PipelineError(f"R2 could not {what}: {error}") from None
+
+    def upload(self, key: str, file: Path) -> None:
+        extra = {
+            "ContentType": CONTENT_TYPES.get(file.suffix.lower(), "application/octet-stream"),
+            "CacheControl": STEM_CACHE,
+        }
+        self._call(f"take {key}", self.s3.upload_file, str(file), self.bucket, key, ExtraArgs=extra)
+
+    def size(self, key: str) -> int | None:
+        """The object's size in bytes, or None if it is not there."""
+        try:
+            return self.s3.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
+        except ClientError as error:
+            if error.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound"):
+                return None
+            raise PipelineError(f"R2 could not look at {key}: {error}") from None
+        except BotoCoreError as error:
+            raise PipelineError(f"R2 could not look at {key}: {error}") from None
+
+    def _list(self, **query) -> list[dict]:
+        pages = self.s3.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, **query)
+        return self._call("list the bucket", list, pages)
+
+    def remove(self, song_id: str) -> None:
+        """Delete whatever is under the song's folder."""
+        for page in self._list(Prefix=f"{song_id}/"):
+            for entry in page.get("Contents", []):
+                self._call(f"delete {entry['Key']}", self.s3.delete_object, Bucket=self.bucket, Key=entry["Key"])
+
+    def folders(self) -> list[str]:
+        """The top-level folders: one per song id."""
+        pages = self._list(Delimiter="/")
+        return [prefix["Prefix"].rstrip("/") for page in pages for prefix in page.get("CommonPrefixes", [])]
+
+    def allow_browsers(self) -> bool:
+        """Let web pages download from the bucket. False if this key may not change the bucket's settings."""
+        try:
+            self.s3.put_bucket_cors(Bucket=self.bucket, CORSConfiguration={"CORSRules": R2_CORS})
+        except ClientError as error:
+            if error.response["Error"]["Code"] in ("AccessDenied", "Unauthorized", "403"):
+                return False
+            raise PipelineError(f"R2 could not save the bucket's CORS policy: {error}") from None
+        except BotoCoreError as error:
+            raise PipelineError(f"R2 could not save the bucket's CORS policy: {error}") from None
+        return True
 
 
 class Supabase:
@@ -82,6 +184,25 @@ class Supabase:
         self.url = url
         self.http = requests.Session()
         self.http.headers.update({"apikey": key, "Authorization": f"Bearer {key}"})
+        self.r2 = R2.from_env()
+        self._r2_shared = False
+
+    @property
+    def storage(self) -> str:
+        """Where upload() puts a song's stems: the value of its `storage` column."""
+        return "r2" if self.r2 else "supabase"
+
+    def rpc(self, function: str, arguments: dict):
+        response = self.http.post(f"{self.url}/rest/v1/rpc/{function}", json=arguments, timeout=30)
+        return self._check(response).json() if response.content else None
+
+    def share_r2(self) -> None:
+        """Give the database the bucket and its key, with which it signs the
+        site's download links (Vault secret `r2_stems`). Done on every start,
+        so a key changed in .env reaches the site too."""
+        if self.r2 and not self._r2_shared:
+            self.rpc("set_r2_stems", {"config": self.r2.config})
+            self._r2_shared = True
 
     def _check(self, response: requests.Response) -> requests.Response:
         if not response.ok:
@@ -113,7 +234,13 @@ class Supabase:
         return self._check(response).json()[0]
 
     def remove_stems(self, song_id: str) -> None:
-        """Delete whatever is in the bucket under the song's folder."""
+        """Delete the song's stems, wherever they are."""
+        self.remove_supabase_stems(song_id)
+        if self.r2:
+            self.r2.remove(song_id)
+
+    def remove_supabase_stems(self, song_id: str) -> None:
+        """Delete whatever is in Supabase's bucket under the song's folder."""
         listing = self._check(self.http.post(
             f"{self.url}/storage/v1/object/list/{BUCKET}",
             json={"prefix": song_id, "limit": 100},
@@ -125,14 +252,26 @@ class Supabase:
                 f"{self.url}/storage/v1/object/{BUCKET}", json={"prefixes": paths}, timeout=60
             ))
 
+    def download(self, path: str, to: Path) -> None:
+        """Save a stem from Supabase's bucket as a file."""
+        with self.http.get(f"{self.url}/storage/v1/object/{BUCKET}/{path}", stream=True, timeout=600) as response:
+            self._check(response)
+            with to.open("wb") as handle:
+                for chunk in response.iter_content(1 << 20):
+                    handle.write(chunk)
+
     def upload(self, path: str, file: Path) -> None:
+        """Put a stem where the stems are kept (see `storage`)."""
+        if self.r2:
+            self.share_r2()
+            return self.r2.upload(path, file)
         with file.open("rb") as handle:
             response = self.http.post(
                 f"{self.url}/storage/v1/object/{BUCKET}/{path}",
                 data=handle,
                 headers={
                     "Content-Type": CONTENT_TYPES.get(file.suffix.lower(), "application/octet-stream"),
-                    "Cache-Control": "max-age=31536000",  # a song's stems never change
+                    "Cache-Control": "max-age=31536000",
                     "x-upsert": "true",
                 },
                 timeout=600,
@@ -329,7 +468,7 @@ def process(db: Supabase, song: dict) -> None:
         files = guitar_split.split_song(song["youtube_url"], WORK / song_id, report=report)
         report("upload", "uploading the stems...")
         stems = upload_stems(db, song_id, files, song.get("instrumental", False))
-        update({"status": "draft", "stems": stems, "step": "", "step_detail": "", "error": ""})
+        update({"status": "draft", "stems": stems, "storage": db.storage, "step": "", "step_detail": "", "error": ""})
         shutil.rmtree(WORK / song_id, ignore_errors=True)
         print("  ready as a draft")
     except SongGone:
@@ -358,8 +497,33 @@ def next_song(db: Supabase, resume: bool) -> dict | None:
     return None
 
 
+def drop_orphans(db: Supabase) -> None:
+    """Delete from R2 the stems of songs that are gone.
+
+    /admin deletes a song's row but cannot reach R2 (only the worker has its
+    key), so the worker tidies up after it.
+    """
+    if not db.r2:
+        return
+    try:
+        folders = [folder for folder in db.r2.folders() if SONG_ID.fullmatch(folder)]
+        for start in range(0, len(folders), 50):
+            some = folders[start:start + 50]
+            kept = {row["id"] for row in db.songs(select="id", id=f"in.({','.join(some)})")}
+            for song_id in some:
+                if song_id not in kept:
+                    print(f"  song {song_id} was deleted in /admin; deleting its stems from R2")
+                    db.r2.remove(song_id)
+    except (requests.RequestException, PipelineError) as error:
+        # Nothing depends on it; the next round tries again.
+        print(f"  could not tidy up R2 ({type(error).__name__})")
+
+
 def run(db: Supabase, once: bool) -> None:
     print("Penies worker: watching for songs added on /admin. Ctrl-C to stop.")
+    print(f"Stems go to {'R2 (' + db.r2.bucket + ')' if db.r2 else 'Supabase Storage'}.")
+    db.share_r2()
+    drop_orphans(db)
     resume = True
     try:
         while True:
@@ -372,6 +536,7 @@ def run(db: Supabase, once: bool) -> None:
                 continue
             if song:
                 process(db, song)
+                drop_orphans(db)
             else:
                 resume = False
                 if once:
@@ -407,10 +572,87 @@ def import_folder(
     })
     details = find_details(song, guitar_split.print_report)
     stems = upload_stems(db, song["id"], files, instrumental)
-    slug = db.update_song(song["id"], {**details, "stems": stems, "status": "draft", "step": ""})[0]["slug"]
+    fields = {**details, "stems": stems, "storage": db.storage, "status": "draft", "step": ""}
+    slug = db.update_song(song["id"], fields)[0]["slug"]
     if publish:
         db.update_song(song["id"], {"status": "published"})
     print(f"{'Published' if publish else 'Draft'}: {details['artist'] or '?'} - {details['title']}  (/songs/{slug})")
+
+
+def check_links(db: Supabase, song: dict) -> None:
+    """Make sure a visitor's browser can download the song's stems from R2:
+    the database signs a link for each, R2 accepts it and lets a web page read it."""
+    links = db.rpc("stem_links", {"song_id": song["id"]})
+    if not links or set(links) != set(song["stems"]):
+        raise PipelineError("the database gave no links for the song (is the migration stems_in_r2 pushed?)")
+    for name, link in links.items():
+        allowed = None
+        for _ in range(6):  # a new CORS policy takes a moment to apply
+            try:
+                response = requests.get(link, headers={"Range": "bytes=0-0", "Origin": SITE}, timeout=30)
+            except requests.RequestException as error:
+                # The link is in the exception's text; it must not be printed.
+                raise PipelineError(f"could not reach R2 ({type(error).__name__})") from None
+            if response.status_code not in (200, 206):
+                raise PipelineError(f"R2 refused the site's link for {name} (HTTP {response.status_code})")
+            allowed = response.headers.get("Access-Control-Allow-Origin")
+            if allowed:
+                break
+            time.sleep(5)
+        if not allowed:
+            raise PipelineError(
+                "the bucket does not let web pages download from it. In Cloudflare, open the bucket's "
+                f"Settings, CORS Policy, and save: {json.dumps(R2_CORS)}"
+            )
+
+
+def move_to_r2(db: Supabase, delete_copies: bool) -> None:
+    """Copy the stems that are still in Supabase Storage to R2, a song at a time.
+
+    A song is switched over (`storage`) once its files are in R2 and the site's
+    links to them work, so the site plays every song throughout and the copy
+    can be stopped and run again. The copies in Supabase stay until
+    --delete-copies.
+    """
+    if not db.r2:
+        sys.exit(f"error: set {', '.join(R2_ENV)} in .env first (see .env.example)")
+    db.share_r2()
+    if not db.r2.allow_browsers():
+        print("This key may not change the bucket's settings; the CORS policy is checked below.")
+
+    songs = [song for song in db.songs(storage="eq.supabase") if song["stems"]]
+    print(f"{len(songs)} song(s) to copy to R2 ({db.r2.bucket}).")
+    for number, song in enumerate(songs, 1):
+        print(f"{number}/{len(songs)} {song['title'] or song['youtube_id']}")
+        with tempfile.TemporaryDirectory() as folder:
+            for name, path in song["stems"].items():
+                file = Path(folder) / Path(path).name
+                db.download(path, file)
+                db.r2.upload(path, file)
+                if db.r2.size(path) != file.stat().st_size:
+                    raise PipelineError(f"{path} did not arrive whole in R2")
+                print(f"  {name} ({file.stat().st_size / 1e6:.1f} MB)")
+        db.update_song(song["id"], {"storage": "r2"})
+        try:
+            check_links(db, song)
+        except PipelineError:
+            db.update_song(song["id"], {"storage": "supabase"})  # the site goes on playing it from Supabase
+            raise
+    print("Every song with stems is in R2.")
+
+    if not delete_copies:
+        print("The copies in Supabase Storage are still there; `to-r2 --delete-copies` removes them.")
+        return
+    moved = [song for song in db.songs(storage="eq.r2") if song["stems"]]
+    answer = input(f"Delete the Supabase copies of {len(moved)} song(s)? R2 then has the only ones. [y/N] ")
+    if answer.strip().lower() != "y":
+        return
+    for song in moved:
+        if any(db.r2.size(path) is None for path in song["stems"].values()):
+            raise PipelineError(f"{song['title']} is not whole in R2; nothing of it was deleted")
+        check_links(db, song)
+        db.remove_supabase_stems(song["id"])
+    print("Deleted.")
 
 
 def add_admin(db: Supabase, username: str) -> None:
@@ -457,6 +699,8 @@ def main() -> None:
     imported.add_argument("--artist", default="", help="artist (default: from the video)")
     imported.add_argument("--instrumental", action="store_true", help="no singer: the vocals stem is left out")
     imported.add_argument("--publish", action="store_true", help="publish it right away")
+    moved = commands.add_parser("to-r2", help="copy the stems still in Supabase Storage to R2")
+    moved.add_argument("--delete-copies", action="store_true", help="then delete them from Supabase (asks first)")
     args = parser.parse_args()
 
     db = Supabase()
@@ -465,6 +709,8 @@ def main() -> None:
             add_admin(db, args.username)
         elif args.command == "import":
             import_folder(db, args.folder, args.url, args.title, args.artist, args.instrumental, args.publish)
+        elif args.command == "to-r2":
+            move_to_r2(db, args.delete_copies)
         else:
             run(db, once=args.command == "once")
     except PipelineError as error:

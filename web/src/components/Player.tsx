@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { StemEngine, type StemFiles } from "@/lib/engine";
 import { dictionaries, formatTime, type Lang } from "@/lib/i18n";
-import { playableLength, playableRange, STEMS_BUCKET, supabaseBrowser, type Song } from "@/lib/supabase";
+import { downloadStems, playableLength, playableRange, type Song } from "@/lib/supabase";
 
 const STEMS = ["instruments", "rhythm-guitar", "lead-guitar", "vocals"] as const;
 const MIN_SPEED = 50;
@@ -51,17 +51,10 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   // Download and decode the stems.
   useEffect(() => {
     let cancelled = false;
-    const storage = supabaseBrowser().storage.from(STEMS_BUCKET);
     const load = async () => {
-      const files: Partial<Record<(typeof STEMS)[number], ArrayBuffer>> = {};
-      await Promise.all(
-        stemNames(song).map(async (name) => {
-          const { data, error } = await storage.download(song.stems[name]);
-          if (error) throw error;
-          files[name] = await data.arrayBuffer();
-          if (!cancelled) setFetched((n) => n + 1);
-        }),
-      );
+      const files = await downloadStems(song, stemNames(song), () => {
+        if (!cancelled) setFetched((n) => n + 1);
+      });
       if (cancelled) return;
       const created = await StemEngine.create(files as StemFiles, { vocals: true, lead: false }, playableRange(song));
       if (cancelled) return created.destroy();

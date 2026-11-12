@@ -3,7 +3,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 
-/** Name of the storage bucket that holds every song's stems. */
+/**
+ * Name of the Supabase Storage bucket that holds the stems of songs whose
+ * `storage` is "supabase": the ones not copied to R2 yet.
+ */
 export const STEMS_BUCKET = "stems";
 
 // /admin logins are usernames; Supabase wants an email, so "maria" signs in as
@@ -47,6 +50,11 @@ export type Song = {
   end_seconds: number | null;
   /** Stem name -> path in the stems bucket. */
   stems: Record<string, string>;
+  /**
+   * Where the stems are: Cloudflare R2, or Supabase Storage for a song that
+   * was not copied over yet (`uv run worker.py to-r2`). The paths are the same.
+   */
+  storage: "supabase" | "r2";
   /** Place in the landing page's list, from 1. Null: not placed yet, shown first. */
   sort_order: number | null;
   created_at: string;
@@ -95,6 +103,53 @@ export function playableRange(song: Pick<Song, "start_seconds" | "end_seconds" |
 export function playableLength(song: Pick<Song, "start_seconds" | "end_seconds" | "duration_seconds">): number | null {
   const { start, end } = playableRange(song);
   return end === null ? null : end - start;
+}
+
+/**
+ * Downloads a song's stems, stem name -> the file's bytes; `only` picks the
+ * stems to fetch.
+ *
+ * From R2 the browser needs links that the database signs for whoever may
+ * read the song (`stem_links`), so a draft's audio stays admin-only. The
+ * links stay the same for days, which lets the browser reuse a stem it has.
+ * No links means the song is still in Supabase Storage. The database is asked
+ * rather than `song.storage`, because a page may hold the song's row from
+ * before it moved.
+ */
+export async function downloadStems<Name extends string>(
+  song: Pick<Song, "id" | "stems">,
+  only: readonly Name[],
+  onStem?: () => void,
+): Promise<Partial<Record<Name, ArrayBuffer>>> {
+  const client = supabaseBrowser();
+  let fetchStem: (name: Name) => Promise<ArrayBuffer>;
+  const { data, error } = await client.rpc("stem_links", { song_id: song.id });
+  if (error) throw error;
+  const links = data as Record<string, string> | null;
+  if (links) {
+    fetchStem = async (name) => {
+      if (!links[name]) throw new Error(`no link for ${name}`);
+      // The link itself is not part of the message: it would let anyone download the stem.
+      const response = await fetch(links[name]).catch(() => null);
+      if (!response?.ok) throw new Error(`${name}: download failed (${response?.status ?? "network"})`);
+      return response.arrayBuffer();
+    };
+  } else {
+    const storage = client.storage.from(STEMS_BUCKET);
+    fetchStem = async (name) => {
+      const { data, error } = await storage.download(song.stems[name]);
+      if (error) throw error;
+      return data.arrayBuffer();
+    };
+  }
+  const files: Partial<Record<Name, ArrayBuffer>> = {};
+  await Promise.all(
+    only.map(async (name) => {
+      files[name] = await fetchStem(name);
+      onStem?.();
+    }),
+  );
+  return files;
 }
 
 let browserClient: SupabaseClient | undefined;
