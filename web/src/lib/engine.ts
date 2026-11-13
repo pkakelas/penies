@@ -10,6 +10,7 @@
 // which does the time-stretch and the pitch shift; one node for everything keeps
 // the stems aligned (and so every stem is transposed together).
 // Its output is split back into the three pairs, with a gain on vocals and lead.
+// A loop is the stretcher's own (loopStart/loopEnd), so it goes round without a gap.
 
 type StretchNode = AudioWorkletNode & {
   schedule(change: {
@@ -18,6 +19,9 @@ type StretchNode = AudioWorkletNode & {
     output?: number;
     rate?: number;
     semitones?: number;
+    /** Input seconds; on reaching loopEnd the input goes back by the loop's length. 0 and 0 = no loop. */
+    loopStart?: number;
+    loopEnd?: number;
   }): Promise<unknown>;
   addBuffers(channels: Float32Array[], transfer?: ArrayBuffer[]): Promise<number>;
   dropBuffers(): Promise<unknown>;
@@ -63,6 +67,9 @@ export type StemFiles = {
   "lead-guitar": ArrayBuffer;
   vocals?: ArrayBuffer;
 };
+
+/** A passage played over and over, in seconds of the song (position 0 = its start). */
+export type Loop = { start: number; end: number };
 
 /** The part of the recording to play, in seconds. Missing or null means the recording's own start or end. */
 export type PlayRange = { start?: number | null; end?: number | null };
@@ -112,6 +119,7 @@ export class StemEngine {
   private startDelay = 0; // seconds the stretcher needs to start a note cleanly
   private rate = 1;
   private semitones = 0;
+  private loop: Loop | null = null;
   // Where we are: at context time `anchorTime` the song was at `anchorPos`
   // seconds, and (while playing) it moves on from there at `rate`.
   private anchorPos = 0;
@@ -160,7 +168,7 @@ export class StemEngine {
    */
   static async create(
     files: StemFiles,
-    levels: { vocals: boolean; lead: boolean },
+    levels: { vocals: number; lead: number },
     range: PlayRange = {},
   ): Promise<StemEngine> {
     const engine = new StemEngine();
@@ -183,8 +191,8 @@ export class StemEngine {
       const lead = ctx.createChannelMerger(2);
       engine.vocalGain = ctx.createGain();
       engine.leadGain = ctx.createGain();
-      engine.vocalGain.gain.value = levels.vocals ? 1 : 0;
-      engine.leadGain.gain.value = levels.lead ? 1 : 0;
+      engine.vocalGain.gain.value = levels.vocals;
+      engine.leadGain.gain.value = levels.lead;
       node.connect(split);
       split.connect(backing, 0, 0);
       split.connect(backing, 1, 1);
@@ -222,8 +230,13 @@ export class StemEngine {
   /** Seconds into the song. */
   position(): number {
     if (!this.playing) return this.anchorPos;
-    const moved = Math.max(0, this.ctx.currentTime - this.anchorTime) * this.rate;
-    return Math.min(this.duration, this.anchorPos + moved);
+    let pos = this.anchorPos + Math.max(0, this.ctx.currentTime - this.anchorTime) * this.rate;
+    // Gone round the loop: the stretcher went back to its start at its end.
+    const loop = this.loop;
+    if (loop && this.anchorPos < loop.end && pos >= loop.end) {
+      pos = loop.start + ((pos - loop.end) % (loop.end - loop.start));
+    }
+    return Math.min(this.duration, pos);
   }
 
   play(): void {
@@ -264,19 +277,51 @@ export class StemEngine {
     if (this.playing) this.startAt(this.position());
   }
 
-  setVocals(on: boolean): void {
-    this.fade(this.vocalGain, on);
+  /**
+   * Play `loop` over and over, or (null) carry on to the end of the song. If
+   * the song is at or past the loop's end, it goes to the loop's start.
+   */
+  setLoop(loop: Loop | null): void {
+    const pos = this.position();
+    this.loop = loop;
+    const at = loop && pos >= loop.end ? loop.start : pos;
+    if (this.playing) this.startAt(at);
+    else {
+      this.anchorPos = at;
+      this.report();
+    }
   }
 
-  setLead(on: boolean): void {
-    this.fade(this.leadGain, on);
+  /** 0 = silent, 1 = as recorded. */
+  setVocals(level: number): void {
+    this.fade(this.vocalGain, level);
   }
 
-  /** Call regularly while playing: at the end of the song it stops and rewinds. Returns true when that happened. */
+  /** 0 = silent, 1 = as recorded. */
+  setLead(level: number): void {
+    this.fade(this.leadGain, level);
+  }
+
+  /**
+   * Call regularly while playing: at the end of the song it stops and rewinds
+   * (returns true when that happened), and once round a loop it tells the media
+   * notification where the song is now.
+   */
   finishIfEnded(): boolean {
-    if (!this.playing || this.position() < this.duration) return false;
-    this.stopAt(0);
-    return true;
+    if (!this.playing) return false;
+    const pos = this.position();
+    if (pos >= this.duration) {
+      this.stopAt(0);
+      return true;
+    }
+    const counted = this.anchorPos + Math.max(0, this.ctx.currentTime - this.anchorTime) * this.rate;
+    if (this.loop && this.anchorPos < this.loop.end && counted >= this.loop.end) {
+      // Count on from here: the same place and speed as the stretcher's, now inside the loop.
+      this.anchorPos = pos;
+      this.anchorTime = this.ctx.currentTime;
+      this.report();
+    }
+    return false;
   }
 
   destroy(): void {
@@ -294,6 +339,8 @@ export class StemEngine {
   }
 
   private startAt(pos: number, delay = 0): void {
+    // Past the end of a loop the stretcher would go back by whole loops: start the loop over instead.
+    if (this.loop && pos >= this.loop.end) pos = this.loop.start;
     this.anchorPos = pos;
     this.anchorTime = this.ctx.currentTime + delay;
     void this.stretch.schedule({
@@ -302,6 +349,8 @@ export class StemEngine {
       output: this.anchorTime,
       rate: this.rate,
       semitones: this.semitones,
+      loopStart: this.loop?.start ?? 0,
+      loopEnd: this.loop?.end ?? 0,
     });
     this.report();
   }
@@ -330,8 +379,8 @@ export class StemEngine {
   }
 
   // A short fade instead of a hard switch, to avoid a click.
-  private fade(gain: GainNode, on: boolean): void {
-    gain.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.015);
+  private fade(gain: GainNode, level: number): void {
+    gain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.015);
   }
 }
 

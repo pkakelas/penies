@@ -6,7 +6,7 @@ Play bouzouki along with the real records.
 
 Learning a song by ear from the original recording is hard. The bouzouki is tangled up with everything else, it goes by fast, and the old masters won't slow down for you.
 
-Penies pulls the bouzouki out of the song. You get the band without it, so you can take its place, or with it, so you can hear exactly what it plays. You can mute the singer too, and slow the whole thing down to half speed (or speed it up) without the pitch changing.
+Penies pulls the bouzouki out of the song. You get the band without it, so you can take its place, or with it, so you can hear exactly what it plays. You can mute the singer too, keep the bouzouki on quietly as a guide, slow the whole thing down to half speed (or speed it up) without the pitch changing, and loop a hard passage until you have it.
 
 The site is in Greek, with an English version at [penies.gr/en](https://www.penies.gr/en). If the song you want isn't there yet, you can ask for it from the site.
 

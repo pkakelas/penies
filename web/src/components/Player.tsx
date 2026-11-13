@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { StemEngine, type StemFiles } from "@/lib/engine";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { StemEngine, type Loop, type StemFiles } from "@/lib/engine";
 import { dictionaries, formatTime, type Lang } from "@/lib/i18n";
 import { downloadStems, playableLength, playableRange, type Song } from "@/lib/supabase";
 
@@ -10,6 +10,9 @@ const MIN_SPEED = 50;
 const MAX_SPEED = 150;
 const MAX_TRANSPOSE = 6; // semitones, up or down
 const CLEAN_TRANSPOSE = 2; // semitones: further than this the player warns that the sound suffers
+const LEAD_LEVELS = [0, 0.25, 1]; // the bouzouki off, quiet (about -12 dB) and as recorded
+const MIN_LOOP = 1; // seconds: a shorter loop is stretched to this
+const TAP_LATE = 0.25; // seconds: how late a tap on "Loop from here" comes after the note it means
 
 /** A number of semitones with its sign: "+2", "0", "−3". */
 const signed = (semitones: number) =>
@@ -26,10 +29,14 @@ const stemNames = (song: Song) =>
 const fill = (value: number, min: number, max: number) =>
   ({ "--fill": `${max > min ? ((value - min) / (max - min)) * 100 : 0}%` }) as CSSProperties;
 
+/** Where a time falls along the seek bar, as a CSS length (the thumb is 14px wide and stays inside the bar). */
+const along = (seconds: number, duration: number) =>
+  `calc(7px + (100% - 14px) * ${duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0})`;
+
 /**
- * Plays a song's backing with the bouzouki and the vocals on switches, at
- * any speed from 50% to 150% and up to six semitones higher or lower. The
- * audio itself is in lib/engine.ts.
+ * Plays a song's backing with the bouzouki (off, quiet or full) and the vocals
+ * on a switch, at any speed from 50% to 150% and up to six semitones higher or
+ * lower, and can play one passage over and over. The audio itself is in lib/engine.ts.
  */
 export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const t = dictionaries[lang].player;
@@ -43,7 +50,11 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(playableLength(song) ?? 0);
-  const [lead, setLead] = useState(false);
+  const [lead, setLead] = useState(0); // index into LEAD_LEVELS
+  // A loop is made with two taps: its start (`loopStart`, then `loop` is still
+  // null) and its end. While `loop` is set, the engine plays it over and over.
+  const [loopStart, setLoopStart] = useState<number | null>(null);
+  const [loop, setLoop] = useState<Loop | null>(null);
   const [vocals, setVocals] = useState(true);
   const [speed, setSpeed] = useState(100);
   const [transpose, setTranspose] = useState(0);
@@ -56,7 +67,7 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
         if (!cancelled) setFetched((n) => n + 1);
       });
       if (cancelled) return;
-      const created = await StemEngine.create(files as StemFiles, { vocals: true, lead: false }, playableRange(song));
+      const created = await StemEngine.create(files as StemFiles, { vocals: 1, lead: LEAD_LEVELS[0] }, playableRange(song));
       if (cancelled) return created.destroy();
       engine.current = created;
       // The engine also starts and stops by itself: the end of the song, an
@@ -92,10 +103,10 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
 
   // Keep the engine in step with the controls.
   useEffect(() => {
-    if (state === "ready") engine.current?.setLead(lead);
+    if (state === "ready") engine.current?.setLead(LEAD_LEVELS[lead]);
   }, [state, lead]);
   useEffect(() => {
-    if (state === "ready") engine.current?.setVocals(vocals);
+    if (state === "ready") engine.current?.setVocals(vocals ? 1 : 0);
   }, [state, vocals]);
   useEffect(() => {
     if (state === "ready") engine.current?.setRate(speed / 100);
@@ -156,6 +167,33 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
     setPosition(seconds);
   };
 
+  // The loop button: first tap marks the start, second the end, a third lets go.
+  const markLoop = () => {
+    const current = engine.current;
+    if (!current) return;
+    const pos = current.position();
+    if (loopStart === null) {
+      setLoopStart(Math.max(0, current.playing ? pos - TAP_LATE : pos));
+      return;
+    }
+    let start = Math.min(loopStart, pos);
+    let end = Math.max(loopStart, pos);
+    if (end - start < MIN_LOOP) {
+      end = Math.min(duration, start + MIN_LOOP);
+      start = Math.max(0, end - MIN_LOOP);
+    }
+    const made = { start, end };
+    current.setLoop(made);
+    setLoop(made);
+    setLoopStart(null);
+    setPosition(current.position());
+  };
+  const clearLoop = () => {
+    engine.current?.setLoop(null);
+    setLoop(null);
+    setLoopStart(null);
+  };
+
   const ready = state === "ready";
   return (
     <section className="rise mt-12 rounded-3xl border border-line bg-coal p-6 shadow-2xl shadow-black/40 [animation-delay:160ms] sm:p-9">
@@ -203,18 +241,37 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
             </div>
           ) : (
             <>
-              <input
-                type="range"
-                className="range"
-                aria-label={t.position}
-                aria-valuetext={formatTime(position)}
-                min={0}
-                max={duration}
-                step={0.1}
-                value={position}
-                style={fill(position, 0, duration)}
-                onChange={(event) => seek(Number(event.target.value))}
-              />
+              <div className="relative">
+                {/* The loop along the bar: a band once it is made, a tick at its start while it is being made. */}
+                {loop ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 h-[9px] -translate-y-1/2 rounded-full bg-brass/30"
+                    style={{
+                      left: along(loop.start, duration),
+                      right: `calc(100% - ${along(loop.end, duration)})`,
+                    }}
+                  />
+                ) : loopStart !== null ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 h-[13px] w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brass"
+                    style={{ left: along(loopStart, duration) }}
+                  />
+                ) : null}
+                <input
+                  type="range"
+                  className="range relative"
+                  aria-label={t.position}
+                  aria-valuetext={formatTime(position)}
+                  min={0}
+                  max={duration}
+                  step={0.1}
+                  value={position}
+                  style={fill(position, 0, duration)}
+                  onChange={(event) => seek(Number(event.target.value))}
+                />
+              </div>
               <div className="mt-1 flex justify-between text-sm text-sand tabular-nums">
                 <span>{formatTime(position)}</span>
                 <span>{formatTime(duration)}</span>
@@ -224,8 +281,53 @@ export function Player({ lang, song }: { lang: Lang; song: Song }) {
         </div>
       </div>
 
+      {/* Its own row, so it has room on a phone; lined up with the seek bar on wider screens. */}
+      {ready && (
+        <div className="mt-5 flex min-h-9 flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:pl-29">
+          {loop ? (
+            <>
+              <span className="flex items-center gap-2 text-brass tabular-nums">
+                <LoopIcon />
+                {formatTime(loop.start)} – {formatTime(loop.end)}
+              </span>
+              <TextButton onClick={clearLoop}>{t.loopStop}</TextButton>
+            </>
+          ) : loopStart !== null ? (
+            <>
+              <button
+                type="button"
+                onClick={markLoop}
+                className="flex h-9 items-center gap-2 rounded-full bg-brass px-4 font-medium text-ink transition-colors hover:bg-brass-bright"
+              >
+                <LoopIcon />
+                {t.loopTo}
+              </button>
+              <span className="text-sand tabular-nums">
+                {t.loopFromTime} {formatTime(loopStart)}
+              </span>
+              <TextButton onClick={clearLoop}>{t.loopCancel}</TextButton>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={markLoop}
+              className="flex h-9 items-center gap-2 rounded-full border border-line px-4 transition-colors hover:border-brass/60 hover:text-cream"
+            >
+              <LoopIcon />
+              {t.loopFrom}
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <Switch label={t.bouzouki} detail={lead ? t.bouzoukiOn : t.bouzoukiOff} checked={lead} onChange={setLead} />
+        <Levels
+          label={t.bouzouki}
+          detail={[t.bouzoukiOff, t.bouzoukiQuiet, t.bouzoukiOn][lead]}
+          choices={t.leadLevels}
+          value={lead}
+          onChange={setLead}
+        />
         <Switch
           label={t.vocals}
           detail={song.instrumental ? t.instrumental : !hasVocals ? t.noVocals : vocals ? t.vocalsOn : t.vocalsOff}
@@ -331,6 +433,73 @@ function Slider(props: {
         {warning}
       </p>
     </div>
+  );
+}
+
+/** A choice of a few levels, for the bouzouki: a card like Switch with a row of buttons in place of the switch. */
+function Levels(props: {
+  label: string;
+  detail: string;
+  choices: readonly string[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const { label, detail, choices, value, onChange } = props;
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border px-5 py-4 transition-colors ${
+        value > 0 ? "border-brass/50 bg-brass/[0.07]" : "border-line"
+      }`}
+    >
+      {/* The buttons go under the words when the card is too narrow for both. */}
+      <span className="min-w-0 grow basis-40">
+        <span className="block font-medium">{label}</span>
+        <span className="mt-0.5 block text-sm text-sand">{detail}</span>
+      </span>
+      <span className="flex shrink-0 rounded-full bg-cream/10 p-1">
+        {choices.map((choice, i) => (
+          <button
+            key={choice}
+            type="button"
+            role="radio"
+            aria-checked={value === i}
+            onClick={() => onChange(i)}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              value === i ? "bg-brass font-medium text-ink" : "text-sand hover:text-cream"
+            }`}
+          >
+            {choice}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function TextButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-sand underline decoration-line underline-offset-4 transition-colors hover:text-cream"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Two arrows chasing each other round. */
+function LoopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path
+        d="M4 11V9a3 3 0 0 1 3-3h12m-3-3 3 3-3 3M20 13v2a3 3 0 0 1-3 3H5m3 3-3-3 3-3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
